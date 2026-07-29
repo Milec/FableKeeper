@@ -109,6 +109,27 @@ Design notes:
 - **Secrets & search** rely on RLS: the search API and command palette run as
   the signed-in user, so a Player's search can never surface a GM secret.
 
+## Character & Campaign Managers (Phase 3)
+
+- **Character Manager** — `src/lib/characters/` holds the pure Pathbuilder
+  importer (`pathbuilder.ts`, unit-tested), server queries, and Server Actions;
+  `src/modules/characters/` holds the sheet editor and the Pathbuilder import
+  form. Characters support manual creation, Pathbuilder JSON import, JSON export
+  (`…/characters/[id]/export`), portraits, and a markdown journal. RLS lets a
+  player manage their own characters while GMs see the whole party.
+- **Campaign Manager** — `src/lib/campaign/` holds session/quest queries and
+  actions; `src/modules/campaign/` holds their editors. Sessions are dated recap
+  notes (with GM-only planning sessions); quests are grouped by status with
+  GM-secret support. Both reuse the markdown renderer and the secret-visibility
+  RLS pattern.
+- **Image storage** — `src/components/media/image-upload.tsx` uploads to the
+  `media` Storage bucket at `{campaignId}/{kind}/{uuid}.{ext}` and writes the
+  public URL into the surrounding form. Reused anywhere images are needed.
+
+Navigation for these lives in the campaign section nav
+(`src/components/layout/campaign-nav.tsx`), since they are campaign-scoped rather
+than global tools.
+
 ## Planned modules
 
 The registry already lists the roadmap modules (World Builder, Characters,
