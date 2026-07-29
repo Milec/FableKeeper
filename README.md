@@ -10,7 +10,7 @@ FableKeeper unites worldbuilding, character management, encounter design, rollab
 
 ## Status
 
-FableKeeper is being built iteratively. **Phases 1–3 are implemented** in this repository.
+FableKeeper is being built iteratively. **Phases 1–4 are implemented** in this repository.
 
 **Phase 1 — Foundation**
 - ✅ Project setup — Next.js (App Router), TypeScript, Tailwind, shadcn/ui, TanStack Query, Zod, Framer Motion
@@ -37,6 +37,13 @@ FableKeeper is being built iteratively. **Phases 1–3 are implemented** in this
 - ✅ **Session tracker** with dated recap notes and GM-only planning sessions
 - ✅ **Quest tracker** grouped by status (active / on hold / completed / failed), with GM-secret quests
 - ✅ Per-campaign section navigation (Overview · Characters · Sessions · Quests)
+
+**Phase 4 — Generators**
+- ✅ **NPC Generator** — personality, ideals/bonds/flaws, appearance, voice, biography, plot hooks, and a portrait prompt
+- ✅ **Name Generator** — people (by ancestry), settlements, taverns, and ships, with saved favorites
+- ✅ **Shop Generator** — a keeper, description, and priced inventory that scales to settlement size and level
+- ✅ **Backstory Generator** — summary, full history, future goals, and adventure hooks
+- ✅ All generators are **deterministic** (seedable), copy out as **markdown** for the World Builder, and run with no external services
 
 See the [roadmap](#roadmap) for what comes next.
 
@@ -174,8 +181,8 @@ FableKeeper is developed in phases. **Phase 1 is complete.**
 | 1     | Setup, auth, schema, permissions, layout, shared UI, dice engine  | ✅ Done        |
 | 2     | World Builder, wiki, search, relationships/backlinks              | ✅ Done        |
 | 3     | Character Manager, Campaign Manager, image storage               | ✅ Done        |
-| 4     | NPC / Shop / Name / Backstory generators                          | 🔜 Next        |
-| 5     | Encounter Builder, Rollable Tables (dice engine ready)            | Planned        |
+| 4     | NPC / Shop / Name / Backstory generators                          | ✅ Done        |
+| 5     | Encounter Builder, Rollable Tables (dice engine ready)            | 🔜 Next        |
 | 6     | Interactive maps, AI-assisted generation, performance, polish     | Planned        |
 
 Future modules the architecture is designed to accommodate include a Bestiary
