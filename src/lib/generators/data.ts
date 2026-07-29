@@ -123,11 +123,13 @@ export const BONDS = [
 ];
 
 export const FLAWS = [
-  "cannot resist a wager", "trusts the wrong people", "drinks to forget",
-  "quick to anger over insults to their honor", "greedy beyond reason",
-  "terrified of deep water", "keeps dangerous secrets out of pride",
-  "holds grudges for decades", "reckless when someone is watching",
-  "lies even when the truth would serve better",
+  // Phrased to follow "they …" (singular they), so keep these as bare plural
+  // verb phrases — "trust", not "trusts".
+  "cannot resist a wager", "trust the wrong people", "drink to forget",
+  "are quick to anger over insults to their honor", "are greedy beyond reason",
+  "are terrified of deep water", "keep dangerous secrets out of pride",
+  "hold grudges for decades", "turn reckless when someone is watching",
+  "lie even when the truth would serve better",
 ];
 
 export const GOALS = [

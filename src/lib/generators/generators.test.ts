@@ -59,6 +59,20 @@ describe("generateNames", () => {
   });
 });
 
+describe("generated prose grammar", () => {
+  it("agrees with singular 'they' in biographies and backstories", () => {
+    // Flaws are rendered as "they {flaw}", so a third-person-singular verb
+    // ("they trusts the wrong people") reads as broken. Guard every seed.
+    const bad = /\bthey (?:trusts|drinks|keeps|holds|lies|is)\b/i;
+    for (let i = 0; i < 60; i++) {
+      const npc = generateNpc({ seed: `grammar-${i}` });
+      expect(npc.biography).not.toMatch(bad);
+      const back = generateBackstory({ seed: `grammar-b-${i}` });
+      expect(back.history).not.toMatch(bad);
+    }
+  });
+});
+
 describe("generateNpc", () => {
   it("fills every field", () => {
     const npc = generateNpc({ seed: "npc" });
