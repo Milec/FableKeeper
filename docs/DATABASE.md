@@ -63,6 +63,24 @@ enum addition, not a schema migration. Notable columns:
 Directed links between entries, enabling Obsidian-style backlinks. Unique on
 `(source, target)` and forbids self-links.
 
+### `characters` (Phase 3)
+One PF2E character sheet, owned by a user (`owner_id`) within a campaign.
+Structured columns cover identity (`ancestry`, `heritage`, `background`,
+`class`, `level`) while `abilities`, `defenses`, and a flexible `data` jsonb
+hold ability scores, derived defenses, and everything else (feats, skills,
+spells, inventory, notes, and the raw Pathbuilder payload). `portrait_url`
+points at an image in Storage.
+
+### `sessions` (Phase 3)
+The session tracker. `content` holds markdown recap notes; `is_secret` makes a
+session GM-only (planning notes) using the same visibility rule as
+`world_entries`.
+
+### `quests` (Phase 3)
+The quest tracker. `status` is the `quest_status` enum
+(`active`/`completed`/`failed`/`on_hold`); `is_secret` hides a quest from
+players.
+
 ## Helper functions
 
 Defined `SECURITY DEFINER` so RLS policies can call them without recursion:
@@ -88,6 +106,22 @@ RLS is enabled on every table. The policies mirror
 | `worlds`           | members                                           | owner/GM/assistant                     |
 | `world_entries`    | members (secrets: only secret-viewers)           | owner/GM/assistant                     |
 | `entry_links`      | when the source entry is visible to the caller   | editors of the source entry            |
+| `characters`       | own characters; managers see all                 | own characters; owner/GM manage any    |
+| `sessions`         | members (secrets: only secret-viewers)           | owner/GM/assistant                     |
+| `quests`           | members (secrets: only secret-viewers)           | owner/GM/assistant                     |
+
+## Storage
+
+Campaign media (character portraits, and future entry images / handouts / maps)
+lives in a single Supabase Storage bucket, `media`, defined in
+[`0006_storage.sql`](../supabase/migrations/0006_storage.sql). Objects are keyed
+`{campaignId}/{kind}/{uuid}.{ext}`, so the campaign id is always the first path
+segment. RLS on `storage.objects` restricts **writes/deletes** to campaign
+members (via the `media_campaign_id(name)` helper + `is_campaign_member`), while
+**reads are public** — the paths are unguessable UUIDs, matching how VTTs serve
+portraits and maps. Nothing requiring secrecy is a binary asset (secret lore and
+GM notes live in RLS-protected tables), so public read is a deliberate, simple
+choice for images.
 
 The `world_entries` read policy is the key privacy guarantee: a non-secret entry
 is visible to any campaign member, but a `is_secret = true` entry is visible only
