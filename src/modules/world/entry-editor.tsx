@@ -4,19 +4,23 @@ import * as React from "react";
 import Link from "next/link";
 import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
-import { Eye, Loader2, Pencil } from "lucide-react";
+import { Loader2, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { EntryContent, type WikiResolver } from "@/components/world/entry-content";
+import { Select } from "@/components/ui/select";
+import type { WikiResolver } from "@/components/world/entry-content";
+import {
+  RichMarkdownEditor,
+  type LinkTarget,
+} from "@/components/editor/rich-markdown-editor";
 import {
   createEntry,
   updateEntry,
   type EntryActionState,
 } from "@/lib/world/actions";
 import { ALL_ENTRY_TYPES, ENTRY_TYPES } from "@/lib/world/entry-types";
+import { templateFor } from "@/lib/world/templates";
 import type { WorldEntry, WorldEntryType } from "@/types/database";
 
 interface EntryEditorProps {
@@ -29,6 +33,8 @@ interface EntryEditorProps {
   defaultType?: WorldEntryType;
   /** Pre-filled title when creating (e.g. from a missing wiki link). */
   defaultTitle?: string;
+  /** Other entries in this world, offered by the link picker/autocomplete. */
+  linkTargets?: LinkTarget[];
   /** Where "Cancel" returns to. */
   cancelHref: string;
 }
@@ -50,6 +56,7 @@ export function EntryEditor({
   entry,
   defaultType,
   defaultTitle,
+  linkTargets = [],
   cancelHref,
 }: EntryEditorProps) {
   const editing = Boolean(entry);
@@ -62,6 +69,25 @@ export function EntryEditor({
   const initialMarkdown =
     (entry?.content as { markdown?: string } | null)?.markdown ?? "";
   const [markdown, setMarkdown] = React.useState(initialMarkdown);
+  const [type, setType] = React.useState<WorldEntryType>(
+    entry?.type ?? defaultType ?? "article",
+  );
+
+  // New entries start from their type's template (MythScribe-style prompts).
+  // Remounting the editor with a new key lets the template land in an empty
+  // draft without ever clobbering something the author has already written.
+  const [editorKey, setEditorKey] = React.useState(0);
+  const applyTemplate = () => {
+    setMarkdown(templateFor(type));
+    setEditorKey((k) => k + 1);
+  };
+  React.useEffect(() => {
+    if (editing || initialMarkdown) return;
+    setMarkdown(templateFor(defaultType ?? "article"));
+    setEditorKey((k) => k + 1);
+    // Only seed once, on mount, for a brand-new entry.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <form action={formAction} className="space-y-5">
@@ -83,18 +109,18 @@ export function EntryEditor({
         </div>
         <div className="space-y-2">
           <Label htmlFor="type">Type</Label>
-          <select
+          <Select
             id="type"
             name="type"
-            defaultValue={entry?.type ?? defaultType ?? "article"}
-            className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            value={type}
+            onChange={(e) => setType(e.target.value as WorldEntryType)}
           >
             {ALL_ENTRY_TYPES.map((t) => (
               <option key={t} value={t}>
                 {ENTRY_TYPES[t].label}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
       </div>
 
@@ -110,39 +136,27 @@ export function EntryEditor({
       </div>
 
       <div className="space-y-2">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <Label>Content</Label>
-          <span className="text-xs text-muted-foreground">
-            Markdown supported · link entries with{" "}
-            <code className="font-mono">[[Entry Title]]</code>
-          </span>
+          <button
+            type="button"
+            onClick={applyTemplate}
+            title={`Replace the content with the ${ENTRY_TYPES[type].label} template`}
+            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+          >
+            <Sparkles className="h-3.5 w-3.5" />
+            Insert {ENTRY_TYPES[type].label} template
+          </button>
         </div>
-        <Tabs defaultValue="write">
-          <TabsList>
-            <TabsTrigger value="write">
-              <Pencil className="mr-1.5 h-3.5 w-3.5" />
-              Write
-            </TabsTrigger>
-            <TabsTrigger value="preview">
-              <Eye className="mr-1.5 h-3.5 w-3.5" />
-              Preview
-            </TabsTrigger>
-          </TabsList>
-          <TabsContent value="write">
-            <Textarea
-              name="markdown"
-              value={markdown}
-              onChange={(e) => setMarkdown(e.target.value)}
-              placeholder="Describe this part of your world…"
-              className="min-h-[20rem] font-mono text-sm"
-            />
-          </TabsContent>
-          <TabsContent value="preview">
-            <div className="min-h-[20rem] rounded-md border p-4">
-              <EntryContent markdown={markdown} resolver={resolver} />
-            </div>
-          </TabsContent>
-        </Tabs>
+        <RichMarkdownEditor
+          key={editorKey}
+          name="markdown"
+          defaultValue={markdown}
+          onChange={setMarkdown}
+          resolver={resolver}
+          linkTargets={linkTargets}
+          placeholder="Describe this part of your world…"
+        />
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">

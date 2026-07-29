@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
+import { Select } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 
 const KIND_LABELS: Record<NameKind, string> = {
@@ -18,9 +19,6 @@ const KIND_LABELS: Record<NameKind, string> = {
 };
 
 const FAVORITES_KEY = "fablekeeper:favorite-names";
-const selectCls =
-  "flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
-
 export function NameGenerator() {
   const [kind, setKind] = React.useState<NameKind>("person");
   const [ancestry, setAncestry] = React.useState<string>("any");
@@ -75,27 +73,26 @@ export function NameGenerator() {
         <div className="grid gap-3 sm:grid-cols-3">
           <div className="space-y-1.5">
             <Label htmlFor="kind">Type</Label>
-            <select
+            <Select
               id="kind"
               value={kind}
               onChange={(e) => setKind(e.target.value as NameKind)}
-              className={selectCls}
             >
               {NAME_KINDS.map((k) => (
                 <option key={k} value={k}>
                   {KIND_LABELS[k]}
                 </option>
               ))}
-            </select>
+            </Select>
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="ancestry">Ancestry</Label>
-            <select
+            <Select
               id="ancestry"
               value={ancestry}
               onChange={(e) => setAncestry(e.target.value)}
               disabled={kind !== "person"}
-              className={cn(selectCls, kind !== "person" && "opacity-50")}
+              className={cn(kind !== "person" && "opacity-50")}
             >
               <option value="any">Any</option>
               {ANCESTRIES.map((a) => (
@@ -103,7 +100,7 @@ export function NameGenerator() {
                   {a}
                 </option>
               ))}
-            </select>
+            </Select>
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="count">How many</Label>

@@ -7,6 +7,7 @@ import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select } from "@/components/ui/select";
 import { MarkdownField } from "@/components/markdown-field";
 import {
   createQuest,
@@ -61,18 +62,17 @@ export function QuestForm({
         </div>
         <div className="space-y-2">
           <Label htmlFor="status">Status</Label>
-          <select
+          <Select
             id="status"
             name="status"
             defaultValue={quest?.status ?? "active"}
-            className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             {Object.entries(QUEST_STATUS_LABELS).map(([value, label]) => (
               <option key={value} value={value}>
                 {label}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
       </div>
 

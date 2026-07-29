@@ -5,6 +5,7 @@ import { Sparkles, Wand2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select } from "@/components/ui/select";
 import { facetValues } from "@/lib/bestiary/filter";
 import type { Creature } from "@/lib/bestiary/types";
 import {
@@ -15,9 +16,6 @@ import {
 } from "@/lib/encounters/generate";
 import type { Combatant, Threat } from "@/lib/encounters/budget";
 import { ChipSelect } from "./chip-select";
-
-const selectCls =
-  "flex h-9 w-full rounded-md border border-input bg-transparent px-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
 /**
  * "Fill this encounter for me" — set criteria, press the button, and the PF2E
@@ -90,18 +88,17 @@ export function GeneratorPanel({
       <div className="grid gap-3 sm:grid-cols-3">
         <div className="space-y-1.5 sm:col-span-1">
           <Label htmlFor="composition">Composition</Label>
-          <select
+          <Select
             id="composition"
             value={composition}
             onChange={(e) => setComposition(e.target.value as Composition)}
-            className={selectCls}
           >
             {COMPOSITIONS.map((c) => (
               <option key={c} value={c}>
                 {COMPOSITION_LABELS[c]}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="minLevel">Min creature level</Label>

@@ -2,7 +2,15 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Dices, Globe2, ListChecks, ScrollText, Swords, Users } from "lucide-react";
+import {
+  BookOpen,
+  Dices,
+  Globe2,
+  ListChecks,
+  ScrollText,
+  Swords,
+  Users,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /** Horizontal section navigation shown across all pages of a campaign. */
@@ -12,6 +20,9 @@ export function CampaignNav({ campaignId }: { campaignId: string }) {
 
   const items = [
     { href: base, label: "Overview", icon: Globe2, exact: true },
+    // Points at the resolver so it opens the World Builder, not a picker.
+    // `startsWith` also matches /worlds/<id>, so the tab stays active inside it.
+    { href: `${base}/world`, label: "World", icon: BookOpen },
     { href: `${base}/characters`, label: "Characters", icon: Users },
     { href: `${base}/sessions`, label: "Sessions", icon: ScrollText },
     { href: `${base}/quests`, label: "Quests", icon: ListChecks },

@@ -117,9 +117,16 @@ describe("builtin tables", () => {
 
   it("includes recognisable PF2E tables", () => {
     const names = ALL_BUILTIN_TABLES.map((t) => t.name.toLowerCase());
-    expect(names).toContain("quirks");
     expect(names.some((n) => n.includes("random terrain"))).toBe(true);
+    expect(names.some((n) => n.includes("random encounter"))).toBe(true);
     expect(names.some((n) => n.includes("treasure"))).toBe(true);
+  });
+
+  it("excludes the tables filtered out during ingestion", () => {
+    const names = ALL_BUILTIN_TABLES.map((t) => t.name.toLowerCase());
+    for (const dropped of ["quirks", "ability quirks", "wellspring surges"]) {
+      expect(names).not.toContain(dropped);
+    }
   });
 
   it("only bundles open-licensed sources", () => {

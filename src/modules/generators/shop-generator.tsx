@@ -14,10 +14,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
+import { Select } from "@/components/ui/select";
 import { CopyButton } from "./copy-button";
-
-const selectCls =
-  "flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
 export function ShopGenerator() {
   const [shopType, setShopType] = React.useState("any");
@@ -41,20 +39,20 @@ export function ShopGenerator() {
       <div className="grid gap-3 sm:grid-cols-3">
         <div className="space-y-1.5">
           <Label htmlFor="shopType">Shop type</Label>
-          <select id="shopType" value={shopType} onChange={(e) => setShopType(e.target.value)} className={selectCls}>
+          <Select id="shopType" value={shopType} onChange={(e) => setShopType(e.target.value)}>
             <option value="any">Any</option>
             {SHOP_TYPES.map((s) => (
               <option key={s.id} value={s.id}>{s.label}</option>
             ))}
-          </select>
+          </Select>
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="size">Settlement size</Label>
-          <select id="size" value={size} onChange={(e) => setSize(e.target.value as SettlementSizeId)} className={selectCls}>
+          <Select id="size" value={size} onChange={(e) => setSize(e.target.value as SettlementSizeId)}>
             {SETTLEMENT_SIZES.map((s) => (
               <option key={s.id} value={s.id}>{s.label}</option>
             ))}
-          </select>
+          </Select>
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="level">Settlement level</Label>

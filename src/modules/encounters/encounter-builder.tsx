@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select } from "@/components/ui/select";
 import { loadBestiary } from "@/lib/bestiary/load";
 import type { Creature } from "@/lib/bestiary/types";
 import { GeneratorPanel } from "./generator-panel";
@@ -33,9 +34,6 @@ import {
 import type { Encounter } from "@/types/database";
 import { encounterCombatantsClient } from "@/modules/encounters/combatants";
 import { cn } from "@/lib/utils";
-
-const selectCls =
-  "flex h-9 w-full rounded-md border border-input bg-transparent px-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
 const KIND_LABELS: Record<CombatantKind, string> = {
   creature: "Creature",
@@ -165,11 +163,11 @@ export function EncounterBuilder({
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="targetThreat">Target threat</Label>
-          <select id="targetThreat" name="targetThreat" value={threat} onChange={(e) => setThreat(e.target.value as Threat)} className={selectCls}>
+          <Select id="targetThreat" name="targetThreat" value={threat} onChange={(e) => setThreat(e.target.value as Threat)}>
             {THREATS.map((t) => (
               <option key={t} value={t}>{THREAT_LABELS[t]}</option>
             ))}
-          </select>
+          </Select>
         </div>
       </div>
 
@@ -264,19 +262,19 @@ export function EncounterBuilder({
                 </div>
                 <div className="w-36 space-y-1">
                   <Label className="text-xs">Type</Label>
-                  <select value={c.kind} onChange={(e) => update(c.id, { kind: e.target.value as CombatantKind })} className={selectCls}>
+                  <Select value={c.kind} onChange={(e) => update(c.id, { kind: e.target.value as CombatantKind })}>
                     {(Object.keys(KIND_LABELS) as CombatantKind[]).map((k) => (
                       <option key={k} value={k}>{KIND_LABELS[k]}</option>
                     ))}
-                  </select>
+                  </Select>
                 </div>
                 <div className="w-24 space-y-1">
                   <Label className="text-xs">Adjust</Label>
-                  <select value={c.adjustment} onChange={(e) => update(c.id, { adjustment: e.target.value as Adjustment })} className={selectCls}>
+                  <Select value={c.adjustment} onChange={(e) => update(c.id, { adjustment: e.target.value as Adjustment })}>
                     <option value="none">None</option>
                     <option value="elite">Elite</option>
                     <option value="weak">Weak</option>
-                  </select>
+                  </Select>
                 </div>
                 <div className="w-14 space-y-1 text-right">
                   <Label className="text-xs">XP</Label>

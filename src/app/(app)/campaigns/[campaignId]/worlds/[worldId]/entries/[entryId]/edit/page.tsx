@@ -37,6 +37,9 @@ export default async function EditEntryPage({
         worldId={worldId}
         resolver={resolver}
         entry={entry}
+        linkTargets={refs
+          .filter((r) => r.id !== entryId)
+          .map((r) => ({ title: r.title, type: r.type }))}
         cancelHref={entryBase}
       />
 

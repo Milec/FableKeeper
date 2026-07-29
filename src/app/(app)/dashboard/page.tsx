@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { BookOpen, Users } from "lucide-react";
+import { BookOpen, Dices, Store, Users, Wand2 } from "lucide-react";
 import { getUserCampaigns, requireUser } from "@/lib/auth";
 import { ROLE_LABELS } from "@/lib/permissions";
 import {
@@ -15,6 +15,13 @@ import { formatDate } from "@/lib/utils";
 import { CreateCampaignForm } from "./create-campaign-dialog";
 
 export const metadata: Metadata = { title: "Dashboard" };
+
+/** Tools that work without picking a campaign first. */
+const QUICK_TOOLS = [
+  { href: "/tools/dice", icon: Dices, title: "Dice Roller", body: "Any formula, animated" },
+  { href: "/tools/generators", icon: Wand2, title: "Generators", body: "NPCs, names, backstories" },
+  { href: "/tools/shops", icon: Store, title: "Shop Generator", body: "Keepers and inventory" },
+] as const;
 
 export default async function DashboardPage() {
   const user = await requireUser();
@@ -37,10 +44,34 @@ export default async function DashboardPage() {
         <CreateCampaignForm />
       </div>
 
+      {/* Quick access to the standalone tools — usable without a campaign. */}
+      <section className="grid gap-3 sm:grid-cols-3">
+        {QUICK_TOOLS.map(({ href, icon: Icon, title, body }) => (
+          <Link key={href} href={href} className="group">
+            <Card className="h-full transition-all hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-md">
+              <CardContent className="flex items-start gap-3 p-4">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary transition-colors group-hover:bg-primary/20">
+                  <Icon className="h-4.5 w-4.5" />
+                </span>
+                <div className="min-w-0">
+                  <p className="font-medium">{title}</p>
+                  <p className="text-xs text-muted-foreground">{body}</p>
+                </div>
+              </CardContent>
+            </Card>
+          </Link>
+        ))}
+      </section>
+
       <section className="space-y-4">
         <h2 className="flex items-center gap-2 font-display text-xl font-semibold">
           <BookOpen className="h-5 w-5 text-primary" />
           Campaigns
+          {campaigns.length > 0 && (
+            <span className="text-sm font-normal text-muted-foreground">
+              ({campaigns.length})
+            </span>
+          )}
         </h2>
 
         {campaigns.length === 0 ? (

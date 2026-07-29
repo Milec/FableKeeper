@@ -12,12 +12,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
+import { Select } from "@/components/ui/select";
 import { CopyButton } from "./copy-button";
 
 const AGES = ["any", "young", "adult", "middle-aged", "old"] as const;
-const selectCls =
-  "flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
-
 export function BackstoryGenerator() {
   const [ancestry, setAncestry] = React.useState("any");
   const [occupation, setOccupation] = React.useState("any");
@@ -50,29 +48,29 @@ export function BackstoryGenerator() {
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="ancestry">Ancestry</Label>
-          <select id="ancestry" value={ancestry} onChange={(e) => setAncestry(e.target.value)} className={selectCls}>
+          <Select id="ancestry" value={ancestry} onChange={(e) => setAncestry(e.target.value)}>
             <option value="any">Any</option>
             {ANCESTRIES.map((a) => (
               <option key={a} value={a}>{a}</option>
             ))}
-          </select>
+          </Select>
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="occupation">Occupation</Label>
-          <select id="occupation" value={occupation} onChange={(e) => setOccupation(e.target.value)} className={selectCls}>
+          <Select id="occupation" value={occupation} onChange={(e) => setOccupation(e.target.value)}>
             <option value="any">Any</option>
             {OCCUPATIONS.map((o) => (
               <option key={o} value={o}>{o}</option>
             ))}
-          </select>
+          </Select>
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="age">Age</Label>
-          <select id="age" value={age} onChange={(e) => setAge(e.target.value)} className={selectCls}>
+          <Select id="age" value={age} onChange={(e) => setAge(e.target.value)}>
             {AGES.map((a) => (
               <option key={a} value={a}>{a === "any" ? "Any" : a}</option>
             ))}
-          </select>
+          </Select>
         </div>
       </div>
 
