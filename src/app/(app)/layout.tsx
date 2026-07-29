@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Dices } from "lucide-react";
-import { requireUser } from "@/lib/auth";
+import { getUserCampaigns, requireUser } from "@/lib/auth";
 import { SidebarNav } from "@/components/layout/sidebar-nav";
 import { UserMenu } from "@/components/layout/user-menu";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -11,6 +11,14 @@ export default async function AppLayout({
   children: React.ReactNode;
 }) {
   const user = await requireUser();
+
+  // Campaign-scoped modules need a campaign to point at. Outside one, fall back
+  // to the most recently updated campaign so links like "World Builder" always
+  // land somewhere useful instead of bouncing back to the dashboard.
+  const campaigns = await getUserCampaigns();
+  const fallbackCampaignId =
+    [...campaigns].sort((a, b) => b.updated_at.localeCompare(a.updated_at))[0]?.id ??
+    null;
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -35,7 +43,7 @@ export default async function AppLayout({
         {/* Sidebar — hidden on small screens, where the top bar suffices. */}
         <aside className="hidden w-64 shrink-0 border-r md:block">
           <div className="sticky top-14 max-h-[calc(100vh-3.5rem)] overflow-y-auto">
-            <SidebarNav />
+            <SidebarNav fallbackCampaignId={fallbackCampaignId} />
           </div>
         </aside>
         <main className="flex-1 px-4 py-6 md:px-8">{children}</main>

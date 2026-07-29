@@ -42,6 +42,7 @@ export default async function NewEntryPage({
         resolver={resolver}
         defaultType={defaultType}
         defaultTitle={title}
+        linkTargets={refs.map((r) => ({ title: r.title, type: r.type }))}
         cancelHref={worldBase}
       />
     </div>

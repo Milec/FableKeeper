@@ -56,7 +56,9 @@ export const MODULES: readonly ModuleDefinition[] = [
     phase: 2,
     status: "available",
     scope: "campaign",
-    campaignPath: "",
+    // Resolves to the campaign's world (see app/campaigns/[id]/world/page.tsx)
+    // so the sidebar link lands inside the World Builder directly.
+    campaignPath: "/world",
     requiredPermission: "world:view",
   },
   {

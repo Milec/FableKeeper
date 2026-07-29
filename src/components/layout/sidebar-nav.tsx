@@ -13,18 +13,24 @@ import { Badge } from "@/components/ui/badge";
  * inside one, otherwise to the dashboard to pick a campaign. Planned modules are
  * shown disabled with a "Soon" badge.
  */
-export function SidebarNav() {
+export function SidebarNav({
+  /** Used for campaign modules when the user isn't inside a campaign yet. */
+  fallbackCampaignId = null,
+}: {
+  fallbackCampaignId?: string | null;
+}) {
   const pathname = usePathname();
   const campaignMatch = pathname.match(/^\/campaigns\/([0-9a-f-]+)/i);
   const activeCampaignId = campaignMatch?.[1] ?? null;
+  const campaignId = activeCampaignId ?? fallbackCampaignId;
 
   const campaignModules = MODULES.filter((m) => m.scope === "campaign");
   const globalModules = MODULES.filter((m) => m.scope === "global");
 
   const hrefFor = (mod: ModuleDefinition): string => {
     if (mod.scope === "global") return `/tools/${mod.id}`;
-    return activeCampaignId
-      ? `/campaigns/${activeCampaignId}${mod.campaignPath ?? ""}`
+    return campaignId
+      ? `/campaigns/${campaignId}${mod.campaignPath ?? ""}`
       : "/dashboard";
   };
 
