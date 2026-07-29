@@ -18,6 +18,8 @@ const combatantSchema = z.object({
   count: z.coerce.number().int().min(1).max(50),
   kind: z.enum(["creature", "simple_hazard", "complex_hazard"]),
   adjustment: z.enum(["none", "elite", "weak"]),
+  /** Present when the combatant was chosen from the bestiary. */
+  source: z.string().max(20).optional(),
 });
 
 const encounterSchema = z.object({
