@@ -10,8 +10,9 @@ FableKeeper unites worldbuilding, character management, encounter design, rollab
 
 ## Status
 
-FableKeeper is being built iteratively. **Phase 1 (Foundation) is implemented** in this repository:
+FableKeeper is being built iteratively. **Phases 1 and 2 are implemented** in this repository.
 
+**Phase 1 — Foundation**
 - ✅ Project setup — Next.js (App Router), TypeScript, Tailwind, shadcn/ui, TanStack Query, Zod, Framer Motion
 - ✅ Authentication — email/password + Google & Discord OAuth via Supabase
 - ✅ Database schema — PostgreSQL with Row Level Security
@@ -20,6 +21,14 @@ FableKeeper is being built iteratively. **Phase 1 (Foundation) is implemented** 
 - ✅ Shared UI component library (shadcn/ui primitives)
 - ✅ A complete, unit-tested **dice engine** and interactive dice roller (a working reference module)
 - ✅ Cloudflare Workers deployment via the OpenNext adapter
+
+**Phase 2 — World Builder & Wiki**
+- ✅ Worlds within a campaign, and a wiki of typed entries (nations, cities, NPCs, items, lore, …) across 25 entry types
+- ✅ Markdown rich-text editing with live preview
+- ✅ Obsidian-style `[[wiki links]]` with automatic **backlinks** ("Linked from")
+- ✅ GM **secret** entries, hidden from players by Row Level Security
+- ✅ Tags, and a type-filtered entry browser
+- ✅ **Global search** — a full search page plus a ⌘K command palette, both RLS-scoped so players never see secrets
 
 See the [roadmap](#roadmap) for what comes next.
 
@@ -155,8 +164,8 @@ FableKeeper is developed in phases. **Phase 1 is complete.**
 | Phase | Focus                                                              | Status         |
 | ----- | ----------------------------------------------------------------- | -------------- |
 | 1     | Setup, auth, schema, permissions, layout, shared UI, dice engine  | ✅ Done        |
-| 2     | World Builder, wiki, search, relationships/backlinks              | 🔜 Next        |
-| 3     | Character Manager, Campaign Manager                               | Planned        |
+| 2     | World Builder, wiki, search, relationships/backlinks              | ✅ Done        |
+| 3     | Character Manager, Campaign Manager                               | 🔜 Next        |
 | 4     | NPC / Shop / Name / Backstory generators                          | Planned        |
 | 5     | Encounter Builder, Rollable Tables (dice engine ready)            | Planned        |
 | 6     | Interactive maps, AI-assisted generation, performance, polish     | Planned        |
