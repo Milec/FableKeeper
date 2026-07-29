@@ -130,6 +130,25 @@ Navigation for these lives in the campaign section nav
 (`src/components/layout/campaign-nav.tsx`), since they are campaign-scoped rather
 than global tools.
 
+## Generators (Phase 4)
+
+Four generators live under `src/lib/generators/` (pure, unit-tested) with UIs in
+`src/modules/generators/` and routes under `src/app/(app)/tools/`:
+
+- `random.ts` — a small seedable PRNG (`mulberry32`) with `pick`/`sample`/
+  `weighted` helpers. Seeding makes every generator **reproducible** and
+  deterministically testable.
+- `data.ts` — original, PF2E-flavoured data tables (ancestries, name fragments,
+  traits, occupations, shop goods) kept separate from logic so the data can grow
+  independently.
+- `names.ts`, `npc.ts`, `shop.ts`, `backstory.ts` — the generators, each with a
+  `…ToMarkdown` helper so a result can be copied straight into a World Builder
+  entry.
+
+The generators run entirely client-side with no external services. The Name
+Generator stores favourites in `localStorage`. AI-assisted generation (Phase 6)
+can layer on top of the same pure functions later without changing the UIs.
+
 ## Planned modules
 
 The registry already lists the roadmap modules (World Builder, Characters,
