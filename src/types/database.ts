@@ -41,6 +41,28 @@ export type WorldEntryType =
   | "note"
   | "article";
 
+export type QuestStatus = "active" | "completed" | "failed" | "on_hold";
+
+/** PF2E ability score keys. */
+export interface AbilityScores {
+  str?: number;
+  dex?: number;
+  con?: number;
+  int?: number;
+  wis?: number;
+  cha?: number;
+}
+
+/** Commonly-surfaced derived defenses stored on a character. */
+export interface CharacterDefenses {
+  ac?: number;
+  hp_max?: number;
+  hp_current?: number;
+  speed?: number;
+  perception?: number;
+  class_dc?: number;
+}
+
 export type Json =
   | string
   | number
@@ -216,6 +238,98 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["entry_links"]["Insert"]>;
         Relationships: [];
       };
+      characters: {
+        Row: {
+          id: string;
+          campaign_id: string;
+          owner_id: string;
+          name: string;
+          ancestry: string | null;
+          heritage: string | null;
+          background: string | null;
+          class: string | null;
+          level: number;
+          key_ability: string | null;
+          portrait_url: string | null;
+          abilities: Json;
+          defenses: Json;
+          data: Json;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          campaign_id: string;
+          owner_id: string;
+          name: string;
+          ancestry?: string | null;
+          heritage?: string | null;
+          background?: string | null;
+          class?: string | null;
+          level?: number;
+          key_ability?: string | null;
+          portrait_url?: string | null;
+          abilities?: Json;
+          defenses?: Json;
+          data?: Json;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["characters"]["Insert"]>;
+        Relationships: [];
+      };
+      sessions: {
+        Row: {
+          id: string;
+          campaign_id: string;
+          title: string;
+          session_date: string | null;
+          content: Json;
+          is_secret: boolean;
+          created_by: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          campaign_id: string;
+          title: string;
+          session_date?: string | null;
+          content?: Json;
+          is_secret?: boolean;
+          created_by: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["sessions"]["Insert"]>;
+        Relationships: [];
+      };
+      quests: {
+        Row: {
+          id: string;
+          campaign_id: string;
+          title: string;
+          content: Json;
+          status: QuestStatus;
+          is_secret: boolean;
+          created_by: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          campaign_id: string;
+          title: string;
+          content?: Json;
+          status?: QuestStatus;
+          is_secret?: boolean;
+          created_by: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["quests"]["Insert"]>;
+        Relationships: [];
+      };
     };
     Views: Record<never, never>;
     Functions: {
@@ -233,6 +347,7 @@ export interface Database {
     Enums: {
       campaign_role: CampaignRole;
       world_entry_type: WorldEntryType;
+      quest_status: QuestStatus;
     };
     CompositeTypes: Record<never, never>;
   };
@@ -245,3 +360,6 @@ export type CampaignMember =
   Database["public"]["Tables"]["campaign_members"]["Row"];
 export type World = Database["public"]["Tables"]["worlds"]["Row"];
 export type WorldEntry = Database["public"]["Tables"]["world_entries"]["Row"];
+export type Character = Database["public"]["Tables"]["characters"]["Row"];
+export type Session = Database["public"]["Tables"]["sessions"]["Row"];
+export type Quest = Database["public"]["Tables"]["quests"]["Row"];
