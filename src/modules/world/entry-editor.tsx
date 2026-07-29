@@ -8,6 +8,7 @@ import { Loader2, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select } from "@/components/ui/select";
 import type { WikiResolver } from "@/components/world/entry-content";
 import {
   RichMarkdownEditor,
@@ -108,19 +109,18 @@ export function EntryEditor({
         </div>
         <div className="space-y-2">
           <Label htmlFor="type">Type</Label>
-          <select
+          <Select
             id="type"
             name="type"
             value={type}
             onChange={(e) => setType(e.target.value as WorldEntryType)}
-            className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             {ALL_ENTRY_TYPES.map((t) => (
               <option key={t} value={t}>
                 {ENTRY_TYPES[t].label}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
       </div>
 

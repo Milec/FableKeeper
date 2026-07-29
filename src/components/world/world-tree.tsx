@@ -8,6 +8,7 @@ import { ENTRY_CATEGORIES, ENTRY_TYPES, type EntryCategory } from "@/lib/world/e
 import type { EntryRef } from "@/lib/world/queries";
 import type { World, WorldEntryType } from "@/types/database";
 import { cn } from "@/lib/utils";
+import { Select } from "@/components/ui/select";
 
 /**
  * The persistent World Builder navigator.
@@ -91,20 +92,19 @@ export function WorldTree({
           World
         </label>
         {worlds.length > 1 ? (
-          <select
+          <Select
             id="world-switcher"
             value={currentWorldId}
             onChange={(e) =>
               router.push(`/campaigns/${campaignId}/worlds/${e.target.value}`)
             }
-            className="flex h-9 w-full rounded-md border border-input bg-transparent px-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             {worlds.map((w) => (
               <option key={w.id} value={w.id}>
                 {w.name}
               </option>
             ))}
-          </select>
+          </Select>
         ) : (
           <Link
             href={base}

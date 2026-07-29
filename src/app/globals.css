@@ -24,6 +24,14 @@
     --input: 240 5.9% 90%;
     --ring: 262 83% 58%;
     --radius: 0.6rem;
+
+    /*
+     * Tells the browser which palette to paint *native* widgets with — select
+     * popups, date pickers, scrollbars, autofill. Without this, a dark-themed
+     * page still gets a white system dropdown, which is how option lists ended
+     * up as white-on-white.
+     */
+    color-scheme: light;
   }
 
   /*
@@ -51,6 +59,8 @@
     --border: 240 5% 16%;
     --input: 240 5% 18%;
     --ring: 263 70% 65%;
+
+    color-scheme: dark;
   }
 }
 
@@ -62,6 +72,53 @@
     @apply bg-background text-foreground antialiased;
     font-feature-settings: "rlig" 1, "calt" 1;
   }
+  /* Text selection that reads against both themes. */
+  ::selection {
+    @apply bg-primary/30 text-foreground;
+  }
+
+  /*
+   * Slim, theme-aware scrollbars. The app has several inner scroll regions
+   * (world tree, bestiary picker, long tables) where chunky default bars are
+   * visually noisy.
+   */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--border)) transparent;
+  }
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply rounded-full border-[3px] border-solid border-transparent bg-border bg-clip-content;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-muted-foreground/50;
+  }
+
+  /*
+   * Chrome paints autofilled inputs with its own near-white background, which
+   * looks broken on a dark form. Re-assert ours via an inset shadow (the
+   * background itself can't be overridden).
+   */
+  input:-webkit-autofill,
+  input:-webkit-autofill:hover,
+  input:-webkit-autofill:focus {
+    -webkit-text-fill-color: hsl(var(--foreground));
+    -webkit-box-shadow: 0 0 0 1000px hsl(var(--background)) inset;
+    caret-color: hsl(var(--foreground));
+    transition: background-color 9999s ease-out 0s;
+  }
+
+  /* Keyboard focus should always be obvious, mouse focus shouldn't shout. */
+  :focus-visible {
+    @apply outline-none ring-2 ring-ring ring-offset-1 ring-offset-background;
+  }
+
   /* Respect reduced-motion preferences (accessibility priority). */
   @media (prefers-reduced-motion: reduce) {
     *,
@@ -72,5 +129,16 @@
       transition-duration: 0.01ms !important;
       scroll-behavior: auto !important;
     }
+  }
+}
+
+@layer utilities {
+  /* Subtle top-lit surface used for hero/stat panels. */
+  .surface-raised {
+    background-image: linear-gradient(
+      to bottom,
+      hsl(var(--foreground) / 0.04),
+      transparent 60%
+    );
   }
 }
