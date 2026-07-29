@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { BookOpen, Users } from "lucide-react";
 import { getUserCampaigns, requireUser } from "@/lib/auth";
 import { ROLE_LABELS } from "@/lib/permissions";
@@ -57,26 +58,28 @@ export default async function DashboardPage() {
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {campaigns.map((campaign) => (
-              <Card key={campaign.id} className="flex h-full flex-col">
-                <CardHeader>
-                  <div className="flex items-start justify-between gap-2">
-                    <CardTitle className="font-display">
-                      {campaign.name}
-                    </CardTitle>
-                    <Badge variant="secondary">
-                      {ROLE_LABELS[campaign.role]}
-                    </Badge>
-                  </div>
-                  {campaign.description && (
-                    <CardDescription className="line-clamp-2">
-                      {campaign.description}
-                    </CardDescription>
-                  )}
-                </CardHeader>
-                <CardContent className="mt-auto text-xs text-muted-foreground">
-                  Created {formatDate(campaign.created_at)}
-                </CardContent>
-              </Card>
+              <Link key={campaign.id} href={`/campaigns/${campaign.id}`}>
+                <Card className="flex h-full flex-col transition-colors hover:border-primary/50">
+                  <CardHeader>
+                    <div className="flex items-start justify-between gap-2">
+                      <CardTitle className="font-display">
+                        {campaign.name}
+                      </CardTitle>
+                      <Badge variant="secondary">
+                        {ROLE_LABELS[campaign.role]}
+                      </Badge>
+                    </div>
+                    {campaign.description && (
+                      <CardDescription className="line-clamp-2">
+                        {campaign.description}
+                      </CardDescription>
+                    )}
+                  </CardHeader>
+                  <CardContent className="mt-auto text-xs text-muted-foreground">
+                    Created {formatDate(campaign.created_at)}
+                  </CardContent>
+                </Card>
+              </Link>
             ))}
           </div>
         )}
