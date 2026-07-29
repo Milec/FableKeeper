@@ -93,6 +93,25 @@ The `world_entries` read policy is the key privacy guarantee: a non-secret entry
 is visible to any campaign member, but a `is_secret = true` entry is visible only
 to Owners, GMs, and Assistant GMs.
 
+### Hardening
+
+[`0003_security_hardening.sql`](../supabase/migrations/0003_security_hardening.sql)
+tightens the exposed API surface to clear the Supabase database linter:
+
+- Pins `search_path` on `set_updated_at`.
+- Revokes `EXECUTE` on the trigger functions (`set_updated_at`,
+  `handle_new_user`, `add_owner_membership`) from all API roles — triggers run
+  regardless, so they never need to be callable as RPCs.
+- Revokes `EXECUTE` on the four RLS helpers from `anon` (policies are
+  `to authenticated`).
+- Moves the `pg_trgm` extension out of `public` into the `extensions` schema.
+
+The linter still reports the four RLS helper functions as executable by
+`authenticated` — this is **intentional and required**: RLS policies evaluate
+those functions in the caller's role, so `authenticated` must keep `EXECUTE`.
+They only ever reveal the caller's *own* membership (via `auth.uid()`), so the
+exposure leaks nothing a user cannot already determine about themselves.
+
 ## Regenerating TypeScript types
 
 The types in [`src/types/database.ts`](../src/types/database.ts) are
