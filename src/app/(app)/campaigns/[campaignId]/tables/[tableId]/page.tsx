@@ -3,11 +3,9 @@ import { notFound } from "next/navigation";
 import { ArrowLeft, Download, Pencil } from "lucide-react";
 import { getCampaignContext } from "@/lib/world/queries";
 import { getRollTable, tableEntries } from "@/lib/tables/queries";
-import { entryRanges } from "@/lib/tables/roll";
 import { can } from "@/lib/permissions";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
 import { TableRoller } from "@/modules/tables/table-roller";
 
 export default async function TablePage({
@@ -22,7 +20,6 @@ export default async function TablePage({
   if (!table || table.campaign_id !== campaignId) notFound();
 
   const entries = tableEntries(table);
-  const ranges = entryRanges(entries);
   const canEdit = can(campaign.role, "table:edit");
   const base = `/campaigns/${campaignId}/tables`;
 
@@ -66,29 +63,6 @@ export default async function TablePage({
       </div>
 
       <TableRoller entries={entries} />
-
-      <Separator />
-
-      <div className="overflow-x-auto rounded-lg border">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b text-left text-muted-foreground">
-              <th className="w-20 px-4 py-2 font-medium">Roll</th>
-              <th className="px-4 py-2 font-medium">Result</th>
-            </tr>
-          </thead>
-          <tbody>
-            {ranges.map((r, i) => (
-              <tr key={i} className="border-b last:border-0">
-                <td className="px-4 py-2 font-mono text-xs tabular-nums text-muted-foreground">
-                  {r.min === r.max ? r.min : `${r.min}–${r.max}`}
-                </td>
-                <td className="px-4 py-2">{r.text}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
     </div>
   );
 }
