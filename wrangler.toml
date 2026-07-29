@@ -1,0 +1,35 @@
+#:schema node_modules/wrangler/config-schema.json
+name = "fablekeeper"
+main = ".open-next/worker.js"
+compatibility_date = "2025-03-01"
+compatibility_flags = ["nodejs_compat", "global_fetch_strictly_public"]
+
+# Static assets emitted by the OpenNext build are served directly from
+# Cloudflare's edge without hitting the Worker.
+[assets]
+directory = ".open-next/assets"
+binding = "ASSETS"
+
+# ---------------------------------------------------------------------------
+# Public (build-time) variables. Secrets (SUPABASE service role, AI keys, etc.)
+# must be configured with `wrangler secret put <NAME>` and NOT committed here.
+# ---------------------------------------------------------------------------
+[vars]
+NEXT_PUBLIC_APP_NAME = "FableKeeper"
+
+# ---------------------------------------------------------------------------
+# Optional bindings — uncomment and provision as later phases need them.
+# ---------------------------------------------------------------------------
+
+# Incremental Static Regeneration / Next cache (Phase 6 performance work).
+# [[kv_namespaces]]
+# binding = "NEXT_INC_CACHE_KV"
+# id = "<kv-namespace-id>"
+
+# R2 bucket for user-uploaded maps, portraits, and handouts.
+# [[r2_buckets]]
+# binding = "MEDIA_BUCKET"
+# bucket_name = "fablekeeper-media"
+
+[observability]
+enabled = true
