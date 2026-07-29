@@ -47,8 +47,11 @@ FableKeeper is being built iteratively. **Phases 1–5 are implemented** in this
 
 **Phase 5 — Encounters & Rollable Tables**
 - ✅ **Encounter Builder** to PF2E rules — XP budget by threat and party size, per-creature XP by level, elite/weak adjustments, simple/complex hazards, with a **live threat rating**; encounters save and reuse
-- ✅ **Rollable Tables** (Foundry-style) — weighted custom tables with a big animated **Roll** button, roll history, folders, and tags
-- ✅ **JSON import/export** for tables, plus a set of **built-in tables** usable in any campaign
+- ✅ **Real PF2E bestiary** — 1,156 creatures (levels −1 to 25) searchable and filterable by type, rarity, size, level, and source book
+- ✅ **One-click encounter generation** — set criteria (composition, creature type, level range, rarity, source) and auto-fill the encounter to the exact XP budget
+- ✅ **Rollable Tables** (Foundry-style) — weighted tables with a big animated **Roll** button; the whole table stays visible and the rolled row is highlighted in place
+- ✅ **Real published PF2E tables**, ingested from open-licensed sources with book/page attribution
+- ✅ **JSON import/export**, folders, and tags for custom tables
 - ✅ Both build directly on the tested dice engine
 
 See the [roadmap](#roadmap) for what comes next.
@@ -124,6 +127,7 @@ Open [http://localhost:3000](http://localhost:3000).
 | `npm run lint`      | Lint                                           |
 | `npm run preview`   | Build + preview on the Cloudflare Workers runtime |
 | `npm run deploy`    | Build + deploy to Cloudflare Workers           |
+| `npm run data:pf2e` | Refresh the bundled PF2E bestiary and tables    |
 
 ---
 
@@ -175,6 +179,8 @@ For the full picture, read:
 - [docs/DATABASE.md](./docs/DATABASE.md)
 - [docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md)
 - [docs/MODULES.md](./docs/MODULES.md)
+- [docs/PF2E-DATA.md](./docs/PF2E-DATA.md) — where the bestiary and tables come
+  from, what's excluded for licensing, and how to refresh them
 
 ---
 

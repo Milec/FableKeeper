@@ -60,6 +60,8 @@ export interface Combatant {
   count: number;
   kind: CombatantKind;
   adjustment: Adjustment;
+  /** Source book abbreviation when the combatant came from the bestiary. */
+  source?: string;
 }
 
 /** The XP budget for a party at a given threat. */

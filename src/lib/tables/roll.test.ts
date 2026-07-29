@@ -10,7 +10,7 @@ import {
   TableImportError,
   type TableEntry,
 } from "./roll";
-import { BUILTIN_TABLES } from "./builtins";
+import { ALL_BUILTIN_TABLES, BUILTIN_TABLES, REFERENCE_TABLES } from "./builtins";
 
 const entries: TableEntry[] = [
   { weight: 3, text: "common" },
@@ -96,5 +96,43 @@ describe("builtin tables", () => {
       expect(tableTotal(table.entries)).toBeGreaterThan(0);
       expect(rollOnTable(table.entries, createRng(1))).not.toBeNull();
     }
+  });
+
+  it("ships real published tables, not invented ones", () => {
+    expect(BUILTIN_TABLES.length).toBeGreaterThan(0);
+    for (const table of BUILTIN_TABLES) {
+      // Every bundled table must be attributable to a real source book.
+      expect(table.source).toBeTruthy();
+      expect(table.category).toBeTruthy();
+      expect(table.kind).toBe("rollable");
+      expect(table.entries.length).toBeGreaterThan(1);
+      // Entries carry actual text, and weights are whole positive numbers.
+      for (const e of table.entries) {
+        expect(e.text.trim().length).toBeGreaterThan(0);
+        expect(Number.isInteger(e.weight)).toBe(true);
+        expect(e.weight).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it("includes recognisable PF2E tables", () => {
+    const names = ALL_BUILTIN_TABLES.map((t) => t.name.toLowerCase());
+    expect(names).toContain("quirks");
+    expect(names.some((n) => n.includes("random terrain"))).toBe(true);
+    expect(names.some((n) => n.includes("treasure"))).toBe(true);
+  });
+
+  it("only bundles open-licensed sources", () => {
+    // Adventure Paths and card decks are excluded on purpose.
+    const closed = ["AoA1", "AoE1", "OoA1", "SoG2", "Rust", "CHD", "CFD", "HPD"];
+    for (const t of ALL_BUILTIN_TABLES) {
+      expect(closed).not.toContain(t.source);
+    }
+  });
+
+  it("reference tables are separated from roll tables", () => {
+    for (const t of REFERENCE_TABLES) expect(t.kind).toBe("reference");
+    const rollIds = new Set(BUILTIN_TABLES.map((t) => t.id));
+    for (const t of REFERENCE_TABLES) expect(rollIds.has(t.id)).toBe(false);
   });
 });

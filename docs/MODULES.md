@@ -159,10 +159,30 @@ Both build on the tested dice engine and the seedable RNG:
   builder UI (`src/modules/encounters/`) recomputes the live threat rating as you
   edit; encounters persist to the `encounters` table.
 - **Rollable Tables** — `src/lib/tables/roll.ts` holds weighted rolling, range
-  computation, and JSON import/export (tested); `builtins.ts` ships static,
-  ready-to-roll tables. The UI (`src/modules/tables/`) has an animated roller
-  with history, an entry editor with live ranges, and import. Custom tables
-  persist to `roll_tables`; built-ins render at `/tools/tables`.
+  computation, and JSON import/export (tested); `builtins.ts` exposes the real
+  published PF2E tables from the bundled dataset. `TableRoller`
+  (`src/modules/tables/`) always renders the **whole** table and highlights the
+  rolled row in place, rather than only reporting a result. Custom tables persist
+  to `roll_tables`; the published ones render at `/tools/tables`.
+
+### Bestiary & automatic encounter generation
+
+- `src/data/pf2e/bestiary.json` — 1,156 real PF2E creatures, produced by
+  `scripts/fetch-pf2e-data.mjs`. See [PF2E-DATA.md](./PF2E-DATA.md).
+- `src/lib/bestiary/` — types, pure filtering/faceting, and a memoised dynamic
+  loader so the dataset is code-split away from the main bundle.
+- `src/lib/encounters/generate.ts` — the generator. Notably it does **not** fill
+  greedily: PF2E creature XP comes in coarse steps (10/15/20/…/160) and the threat
+  thresholds are hard steps, so finishing a few XP under budget would report a
+  whole band too low. Instead `solveBudget()` runs a small bounded DP over
+  (sum, count) to hit the budget exactly — with a capped overshoot for the level
+  bands where the budget is arithmetically unreachable. A property test asserts
+  the requested threat band is achieved >99% of the time across 180
+  party/level/threat combinations.
+- `src/modules/encounters/` — `generator-panel.tsx` (criteria + one-click fill),
+  `bestiary-picker.tsx` (search/filter/add), and `chip-select.tsx` (expandable
+  multi-select; it always keeps selected chips visible so a selection can never
+  hide behind the "show more" toggle).
 
 ## Planned modules
 

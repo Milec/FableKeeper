@@ -10,6 +10,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { loadBestiary } from "@/lib/bestiary/load";
+import type { Creature } from "@/lib/bestiary/types";
+import { GeneratorPanel } from "./generator-panel";
+import { BestiaryPicker } from "./bestiary-picker";
 import {
   saveEncounter,
   updateEncounter,
@@ -94,6 +99,49 @@ export function EncounterBuilder({
       { id: newId(), name: "", level: partyLevel, count: 1, kind: "creature", adjustment: "none" },
     ]);
 
+  // The bestiary is code-split; load it once the builder mounts.
+  const [pool, setPool] = React.useState<Creature[] | null>(null);
+  const [sourceLabels, setSourceLabels] = React.useState<Record<string, string>>({});
+  React.useEffect(() => {
+    let alive = true;
+    loadBestiary()
+      .then((data) => {
+        if (!alive) return;
+        setPool(data.creatures);
+        setSourceLabels(data.meta?.sources ?? {});
+      })
+      .catch(() => setPool([]));
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  /** Add a bestiary creature, bumping the count when it's already present. */
+  const addCreature = (creature: Creature) => {
+    setCombatants((cs) => {
+      const existing = cs.find(
+        (c) => c.name === creature.name && c.level === creature.level,
+      );
+      if (existing) {
+        return cs.map((c) =>
+          c.id === existing.id ? { ...c, count: c.count + 1 } : c,
+        );
+      }
+      return [
+        ...cs,
+        {
+          id: newId(),
+          name: creature.name,
+          level: creature.level,
+          count: 1,
+          kind: "creature" as const,
+          adjustment: "none" as const,
+          source: creature.source,
+        },
+      ];
+    });
+  };
+
   const summary = summarize(combatants, partySize, partyLevel, threat);
 
   return (
@@ -152,13 +200,46 @@ export function EncounterBuilder({
         </CardContent>
       </Card>
 
+      {/* Bestiary-driven tools */}
+      {pool === null ? (
+        <div className="flex items-center gap-2 rounded-lg border bg-muted/20 p-4 text-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          Loading the PF2E bestiary…
+        </div>
+      ) : pool.length === 0 ? null : (
+        <Tabs defaultValue="generate">
+          <TabsList>
+            <TabsTrigger value="generate">Auto-generate</TabsTrigger>
+            <TabsTrigger value="browse">Add from bestiary</TabsTrigger>
+          </TabsList>
+          <TabsContent value="generate" className="pt-3">
+            <GeneratorPanel
+              pool={pool}
+              sourceLabels={sourceLabels}
+              partySize={partySize}
+              partyLevel={partyLevel}
+              threat={threat}
+              onGenerated={setCombatants}
+            />
+          </TabsContent>
+          <TabsContent value="browse" className="pt-3">
+            <BestiaryPicker
+              pool={pool}
+              partyLevel={partyLevel}
+              sourceLabels={sourceLabels}
+              onAdd={addCreature}
+            />
+          </TabsContent>
+        </Tabs>
+      )}
+
       {/* Combatants */}
       <div className="space-y-2">
         <div className="flex items-center justify-between">
           <Label>Creatures &amp; hazards</Label>
           <Button type="button" variant="outline" size="sm" onClick={add}>
             <Plus className="h-4 w-4" />
-            Add
+            Add manually
           </Button>
         </div>
         {combatants.length === 0 ? (
