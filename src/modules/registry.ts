@@ -92,7 +92,7 @@ export const MODULES: readonly ModuleDefinition[] = [
     description: "NPCs, shops, names, and backstories generated to PF2E rules.",
     icon: Wand2,
     phase: 4,
-    status: "planned",
+    status: "available",
     requiredPermission: "tool:use",
   },
   {
@@ -101,7 +101,7 @@ export const MODULES: readonly ModuleDefinition[] = [
     description: "Settlement-appropriate shops, inventory, and shopkeepers.",
     icon: Store,
     phase: 4,
-    status: "planned",
+    status: "available",
     requiredPermission: "tool:use",
   },
   {
