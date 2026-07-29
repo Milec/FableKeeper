@@ -149,6 +149,21 @@ The generators run entirely client-side with no external services. The Name
 Generator stores favourites in `localStorage`. AI-assisted generation (Phase 6)
 can layer on top of the same pure functions later without changing the UIs.
 
+## Encounters & Rollable Tables (Phase 5)
+
+Both build on the tested dice engine and the seedable RNG:
+
+- **Encounter Builder** — `src/lib/encounters/budget.ts` holds the pure PF2E
+  budgeting math (XP budget by threat/party size, per-creature XP by level,
+  elite/weak, simple/complex hazards), unit-tested in `budget.test.ts`. The
+  builder UI (`src/modules/encounters/`) recomputes the live threat rating as you
+  edit; encounters persist to the `encounters` table.
+- **Rollable Tables** — `src/lib/tables/roll.ts` holds weighted rolling, range
+  computation, and JSON import/export (tested); `builtins.ts` ships static,
+  ready-to-roll tables. The UI (`src/modules/tables/`) has an animated roller
+  with history, an entry editor with live ranges, and import. Custom tables
+  persist to `roll_tables`; built-ins render at `/tools/tables`.
+
 ## Planned modules
 
 The registry already lists the roadmap modules (World Builder, Characters,
