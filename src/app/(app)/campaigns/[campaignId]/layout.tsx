@@ -6,6 +6,7 @@ import { ROLE_LABELS } from "@/lib/permissions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CommandPalette } from "@/components/world/command-palette";
+import { CampaignNav } from "@/components/layout/campaign-nav";
 
 export default async function CampaignLayout({
   children,
@@ -44,6 +45,8 @@ export default async function CampaignLayout({
           </Link>
         </Button>
       </div>
+
+      <CampaignNav campaignId={campaign.id} />
 
       {children}
 
