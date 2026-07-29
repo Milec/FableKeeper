@@ -55,6 +55,17 @@ const OPEN_SOURCES = {
   BotD: "Book of the Dead",
 };
 
+/**
+ * Tables to skip even though their source is open-licensed, matched on
+ * `SOURCE|Name`. These are character-option/deviation tables rather than
+ * things a GM rolls at the table, so they only add noise to the tables page.
+ */
+const EXCLUDED_TABLES = new Set([
+  "DA|Ability Quirks",
+  "GMG|Quirks",
+  "SoM|Wellspring Surges",
+]);
+
 /** Bestiary files to ingest (core monster books only). */
 const BESTIARY_FILES = [
   "creatures-b1.json",
@@ -204,6 +215,7 @@ function buildTables(raw) {
 
   for (const t of raw.table ?? []) {
     if (!OPEN_SOURCES[t.source]) continue;
+    if (EXCLUDED_TABLES.has(`${t.source}|${String(t.name).trim()}`)) continue;
     const rows = t.rows ?? [];
     if (rows.length < 3) continue;
 
