@@ -98,6 +98,40 @@ larger scale:
 - **Routes** under `src/app/(app)/campaigns/[campaignId]/…` for the campaign
   overview, world browser, entry view/create/edit, and search.
 
+### Navigation
+
+The World Builder is a **shell**, not a drill-down. `worlds/[worldId]/layout.tsx`
+renders a persistent navigator (`src/components/world/world-tree.tsx`) with the
+world switcher, a name filter, and a category → type → entry tree, so the whole
+world is reachable from any entry. Earlier the type filters only existed on the
+world index page, which meant walking campaign → world → index before anything
+was usable, and losing the navigation the moment you opened an entry.
+
+`campaigns/[campaignId]/world/page.tsx` is a resolver: it redirects to the
+campaign's world (or the overview when none exists), so the sidebar and campaign
+nav can link to "World" without knowing a world id. The sidebar also takes a
+`fallbackCampaignId` from the app layout so campaign-scoped links work from the
+dashboard instead of bouncing back to it.
+
+### Editing
+
+`src/components/editor/rich-markdown-editor.tsx` provides the formatting toolbar
+(bold/italic/strike/code, H1–H3, lists, quote, divider, ⌘B/⌘I) and **two ways to
+link without typing brackets**: a *Link entry* button that opens a searchable
+picker, and inline autocomplete when you type `[[` (↑↓ + Enter). Selected text
+becomes the link alias, i.e. `[[Target|selected]]`.
+
+All text manipulation lives in `src/lib/editor/markdown-commands.ts` — pure
+functions over `{text, selectionStart, selectionEnd}`, covered by 22 unit tests,
+so the toolbar behaviour is verified without a DOM. `MarkdownField` wraps the same
+editor, so sessions, quests, and character journals share it.
+
+`src/lib/world/templates.ts` supplies MythScribe-style guided templates per entry
+type: a new City opens with Overview / Government & Power / Economy & Trade /
+Districts / Notable Figures / Troubles & Hooks rather than an empty box. Templates
+are plain markdown, so they can be edited or deleted freely, and the type selector
+can re-insert one on demand.
+
 Design notes:
 
 - **Content** is stored as `{ markdown: string }` in the `world_entries.content`

@@ -24,6 +24,10 @@ FableKeeper is being built iteratively. **Phases 1–5 are implemented** in this
 
 **Phase 2 — World Builder & Wiki**
 - ✅ Worlds within a campaign, and a wiki of typed entries (nations, cities, NPCs, items, lore, …) across 25 entry types
+- ✅ **Persistent world navigator** — world switcher, filter, and a category → type → entry tree available from every page (no drilling through campaign → world first)
+- ✅ **Guided entry templates** per type, MythScribe-style (a City opens with Government, Economy, Districts, Notable Figures, Hooks…)
+- ✅ **Formatting toolbar** — bold, italic, strikethrough, code, H1–H3, lists, quote, divider, with ⌘B/⌘I
+- ✅ **Two ways to link without typing `[[ ]]`** — a searchable *Link entry* button, and inline autocomplete when you type `[[`
 - ✅ Markdown rich-text editing with live preview
 - ✅ Obsidian-style `[[wiki links]]` with automatic **backlinks** ("Linked from")
 - ✅ GM **secret** entries, hidden from players by Row Level Security
