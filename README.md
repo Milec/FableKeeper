@@ -10,7 +10,7 @@ FableKeeper unites worldbuilding, character management, encounter design, rollab
 
 ## Status
 
-FableKeeper is being built iteratively. **Phases 1–4 are implemented** in this repository.
+FableKeeper is being built iteratively. **Phases 1–5 are implemented** in this repository.
 
 **Phase 1 — Foundation**
 - ✅ Project setup — Next.js (App Router), TypeScript, Tailwind, shadcn/ui, TanStack Query, Zod, Framer Motion
@@ -44,6 +44,12 @@ FableKeeper is being built iteratively. **Phases 1–4 are implemented** in this
 - ✅ **Shop Generator** — a keeper, description, and priced inventory that scales to settlement size and level
 - ✅ **Backstory Generator** — summary, full history, future goals, and adventure hooks
 - ✅ All generators are **deterministic** (seedable), copy out as **markdown** for the World Builder, and run with no external services
+
+**Phase 5 — Encounters & Rollable Tables**
+- ✅ **Encounter Builder** to PF2E rules — XP budget by threat and party size, per-creature XP by level, elite/weak adjustments, simple/complex hazards, with a **live threat rating**; encounters save and reuse
+- ✅ **Rollable Tables** (Foundry-style) — weighted custom tables with a big animated **Roll** button, roll history, folders, and tags
+- ✅ **JSON import/export** for tables, plus a set of **built-in tables** usable in any campaign
+- ✅ Both build directly on the tested dice engine
 
 See the [roadmap](#roadmap) for what comes next.
 
@@ -182,8 +188,8 @@ FableKeeper is developed in phases. **Phase 1 is complete.**
 | 2     | World Builder, wiki, search, relationships/backlinks              | ✅ Done        |
 | 3     | Character Manager, Campaign Manager, image storage               | ✅ Done        |
 | 4     | NPC / Shop / Name / Backstory generators                          | ✅ Done        |
-| 5     | Encounter Builder, Rollable Tables (dice engine ready)            | 🔜 Next        |
-| 6     | Interactive maps, AI-assisted generation, performance, polish     | Planned        |
+| 5     | Encounter Builder, Rollable Tables (dice engine ready)            | ✅ Done        |
+| 6     | Interactive maps, AI-assisted generation, performance, polish     | 🔜 Next        |
 
 Future modules the architecture is designed to accommodate include a Bestiary
 Manager, Kingdom Management, Hex Crawl tools, a Discord bot, and offline support.

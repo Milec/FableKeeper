@@ -81,6 +81,17 @@ The quest tracker. `status` is the `quest_status` enum
 (`active`/`completed`/`failed`/`on_hold`); `is_secret` hides a quest from
 players.
 
+### `encounters` (Phase 5)
+A saved, reusable PF2E encounter. `party_size`, `party_level`, and
+`target_threat` frame the XP budget; `combatants` is a jsonb array of
+`{name, level, count, kind, adjustment}`. The XP/threat math is computed in
+`src/lib/encounters/budget.ts`, not stored.
+
+### `roll_tables` (Phase 5)
+A custom rollable table. `entries` is a jsonb array of `{weight, text}`;
+`folder` and `tags` organise tables. Rolling and import/export logic live in
+`src/lib/tables/roll.ts`.
+
 ## Helper functions
 
 Defined `SECURITY DEFINER` so RLS policies can call them without recursion:
@@ -109,6 +120,8 @@ RLS is enabled on every table. The policies mirror
 | `characters`       | own characters; managers see all                 | own characters; owner/GM manage any    |
 | `sessions`         | members (secrets: only secret-viewers)           | owner/GM/assistant                     |
 | `quests`           | members (secrets: only secret-viewers)           | owner/GM/assistant                     |
+| `encounters`       | members                                          | owner/GM/assistant                     |
+| `roll_tables`      | members                                          | owner/GM/assistant                     |
 
 ## Storage
 

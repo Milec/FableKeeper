@@ -330,6 +330,64 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["quests"]["Insert"]>;
         Relationships: [];
       };
+      encounters: {
+        Row: {
+          id: string;
+          campaign_id: string;
+          name: string;
+          party_size: number;
+          party_level: number;
+          target_threat: string;
+          combatants: Json;
+          notes: string | null;
+          created_by: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          campaign_id: string;
+          name: string;
+          party_size?: number;
+          party_level?: number;
+          target_threat?: string;
+          combatants?: Json;
+          notes?: string | null;
+          created_by: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["encounters"]["Insert"]>;
+        Relationships: [];
+      };
+      roll_tables: {
+        Row: {
+          id: string;
+          campaign_id: string;
+          name: string;
+          description: string | null;
+          folder: string | null;
+          tags: string[];
+          entries: Json;
+          created_by: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          campaign_id: string;
+          name: string;
+          description?: string | null;
+          folder?: string | null;
+          tags?: string[];
+          entries?: Json;
+          created_by: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["roll_tables"]["Insert"]>;
+        Relationships: [];
+      };
     };
     Views: Record<never, never>;
     Functions: {
@@ -363,3 +421,5 @@ export type WorldEntry = Database["public"]["Tables"]["world_entries"]["Row"];
 export type Character = Database["public"]["Tables"]["characters"]["Row"];
 export type Session = Database["public"]["Tables"]["sessions"]["Row"];
 export type Quest = Database["public"]["Tables"]["quests"]["Row"];
+export type Encounter = Database["public"]["Tables"]["encounters"]["Row"];
+export type RollTable = Database["public"]["Tables"]["roll_tables"]["Row"];

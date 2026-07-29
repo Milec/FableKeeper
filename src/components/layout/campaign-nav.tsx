@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Globe2, ListChecks, ScrollText, Users } from "lucide-react";
+import { Dices, Globe2, ListChecks, ScrollText, Swords, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /** Horizontal section navigation shown across all pages of a campaign. */
@@ -15,6 +15,8 @@ export function CampaignNav({ campaignId }: { campaignId: string }) {
     { href: `${base}/characters`, label: "Characters", icon: Users },
     { href: `${base}/sessions`, label: "Sessions", icon: ScrollText },
     { href: `${base}/quests`, label: "Quests", icon: ListChecks },
+    { href: `${base}/encounters`, label: "Encounters", icon: Swords },
+    { href: `${base}/tables`, label: "Tables", icon: Dices },
   ];
 
   return (
