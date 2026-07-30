@@ -152,11 +152,12 @@ export const MODULES: readonly ModuleDefinition[] = [
   {
     id: "ai",
     name: "AI Assist",
-    description: "AI-assisted generation of lore, NPCs, and adventures.",
+    description: "Draft lore and NPCs grounded in the world you've built.",
     icon: Sparkles,
     phase: 6,
-    status: "planned",
-    scope: "global",
+    status: "available",
+    scope: "campaign",
+    campaignPath: "/ai",
     requiredPermission: "tool:use",
   },
 ] as const;

@@ -33,6 +33,10 @@ interface EntryEditorProps {
   defaultType?: WorldEntryType;
   /** Pre-filled title when creating (e.g. from a missing wiki link). */
   defaultTitle?: string;
+  /** Prefilled body/summary/tags — used when AI Assist hands over a draft. */
+  defaultMarkdown?: string;
+  defaultSummary?: string;
+  defaultTags?: string;
   /** Other entries in this world, offered by the link picker/autocomplete. */
   linkTargets?: LinkTarget[];
   /** Where "Cancel" returns to. */
@@ -56,6 +60,9 @@ export function EntryEditor({
   entry,
   defaultType,
   defaultTitle,
+  defaultMarkdown,
+  defaultSummary,
+  defaultTags,
   linkTargets = [],
   cancelHref,
 }: EntryEditorProps) {
@@ -67,7 +74,7 @@ export function EntryEditor({
   );
 
   const initialMarkdown =
-    (entry?.content as { markdown?: string } | null)?.markdown ?? "";
+    (entry?.content as { markdown?: string } | null)?.markdown ?? defaultMarkdown ?? "";
   const [markdown, setMarkdown] = React.useState(initialMarkdown);
   const [type, setType] = React.useState<WorldEntryType>(
     entry?.type ?? defaultType ?? "article",
@@ -129,7 +136,7 @@ export function EntryEditor({
         <Input
           id="summary"
           name="summary"
-          defaultValue={entry?.summary ?? ""}
+          defaultValue={entry?.summary ?? defaultSummary ?? ""}
           placeholder="A one-line description shown in lists and search."
           maxLength={500}
         />
@@ -165,7 +172,7 @@ export function EntryEditor({
           <Input
             id="tags"
             name="tags"
-            defaultValue={entry?.tags?.join(", ") ?? ""}
+            defaultValue={entry?.tags?.join(", ") ?? defaultTags ?? ""}
             placeholder="comma, separated, tags"
           />
         </div>

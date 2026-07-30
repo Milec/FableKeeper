@@ -10,7 +10,7 @@ FableKeeper unites worldbuilding, character management, encounter design, rollab
 
 ## Status
 
-FableKeeper is being built iteratively. **Phases 1–5 are implemented** in this repository.
+FableKeeper is being built iteratively. **Phases 1–6 are implemented** in this repository.
 
 **Phase 1 — Foundation**
 - ✅ Project setup — Next.js (App Router), TypeScript, Tailwind, shadcn/ui, TanStack Query, Zod, Framer Motion
@@ -71,6 +71,13 @@ FableKeeper is being built iteratively. **Phases 1–5 are implemented** in this
 - ✅ **Resolution-independent pins** — stored as fractions of the image, so any Azgaar export size lines up and the frame matches the picture's aspect ratio
 - ✅ **Town** joins City and Village, so settlements aren't forced to one extreme
 
+**Phase 6 — AI Assist**
+- ✅ **Drafts grounded in your world** — every request carries a digest of the world's existing entries, so a new NPC ties into the kingdom you already wrote instead of inventing a rival one
+- ✅ **Links that resolve** — the assistant references existing entries by their exact titles in `[[wiki links]]`, and is told never to invent a link to something that doesn't exist
+- ✅ **Nothing saves itself** — a draft opens *prefilled in the normal entry editor* for you to review and edit; it only lands in the world when you save it
+- ✅ **Fiction, not mechanics** — the assistant is instructed not to invent PF2E rules text or stat blocks; the generators and Encounter Builder handle numbers
+- ✅ **Fully optional** — without an `ANTHROPIC_API_KEY` the page explains what to add and the rest of FableKeeper is unaffected
+
 See the [roadmap](#roadmap) for what comes next.
 
 ---
@@ -111,6 +118,14 @@ cp .env.example .env.local
 
 Fill in your Supabase URL and anon key. To enable Google/Discord login, configure
 those providers in your Supabase dashboard (Authentication → Providers).
+
+`ANTHROPIC_API_KEY` is optional and powers only the AI Assist module — without it
+that page explains what to add and everything else works normally. On Cloudflare
+it is a secret, not a `[vars]` entry:
+
+```bash
+wrangler secret put ANTHROPIC_API_KEY
+```
 
 ### 3. Set up the database
 
@@ -203,7 +218,7 @@ For the full picture, read:
 
 ## Roadmap
 
-FableKeeper is developed in phases. **Phase 1 is complete.**
+FableKeeper is developed in phases. **Phases 1–6 are complete.**
 
 | Phase | Focus                                                              | Status         |
 | ----- | ----------------------------------------------------------------- | -------------- |
@@ -212,7 +227,7 @@ FableKeeper is developed in phases. **Phase 1 is complete.**
 | 3     | Character Manager, Campaign Manager, image storage               | ✅ Done        |
 | 4     | NPC / Shop / Name / Backstory generators                          | ✅ Done        |
 | 5     | Encounter Builder, Rollable Tables (dice engine ready)            | ✅ Done        |
-| 6     | Interactive maps, AI-assisted generation, performance, polish     | 🔜 Next        |
+| 6     | Interactive maps, AI-assisted generation, performance, polish     | ✅ Done        |
 
 Future modules the architecture is designed to accommodate include a Bestiary
 Manager, Kingdom Management, Hex Crawl tools, a Discord bot, and offline support.
