@@ -1,0 +1,660 @@
+{
+ "info": {
+  "version": "1.112.1",
+  "mapName": "Demo",
+  "seed": "135111970",
+  "width": 1680,
+  "height": 849,
+  "exportedAt": "2026-02-16T00:00:00.000Z"
+ },
+ "settings": {
+  "populationRate": 1000,
+  "urbanization": 1,
+  "distanceUnit": "km",
+  "mapName": "Demo"
+ },
+ "notes": [
+  {
+   "id": "marker0",
+   "name": "Chishambe Volcano",
+   "legend": "Erupting volcano. Height: 3481 m."
+  },
+  {
+   "id": "marker1",
+   "name": "Mount Tother",
+   "legend": "Dormant volcano. Height: 4096 m."
+  },
+  {
+   "id": "marker2",
+   "name": "Hot Springs of Bygda",
+   "legend": "A geothermal springs with naturally heated water that provide relaxation and medicinal benefits. Average temperature is 43\u00b0C."
+  }
+ ],
+ "pack": {
+  "states": [
+   {
+    "i": 0,
+    "name": "Neutrals",
+    "neighbors": [
+     12,
+     13,
+     8,
+     6,
+     19,
+     10
+    ],
+    "diplomacy": [
+     [
+      "Tetelilco-Zahuahuacian War",
+      "Tetelilco declared a war on its rival Zahuahuaco",
+      "Zahuahuaco's ally Gazd joined the war on defenders side",
+      "Zahuahuaco's ally Sasbachia joined the war on defenders side",
+      "Zahuahuaco's ally Paowania joined the war on defenders side",
+      "Zahuahuaco's ally Sesosia joined the war on defenders side",
+      "Tetelilco's ally Lohia joined the war on attackers side",
+      "Tetelilco's ally Geiterzelia did not join the war as its allies are in war on both sides",
+      "Tetelilco's ally Vexum avoided entering the war"
+     ],
+     [
+      "Smyrchia-Paowanian War",
+      "Smyrchia declared a war on its rival Paowania",
+      "Paowania's ally Geiterzelia joined the war on defenders side",
+      "Paowania's ally Zahuahuaco joined the war on defenders side",
+      "Paowania's ally Vexum joined the war on defenders side",
+      "Paowania's ally Ialitaris joined the war on defenders side"
+     ],
+     [
+      "Kamaile-Ialitarisian War",
+      "Kamaile declared a war on its rival Ialitaris",
+      "Ialitaris's ally Paowania joined the war on defenders side",
+      "Ialitaris's ally Vexum joined the war on defenders side",
+      "Ialitaris's ally Sesosia joined the war on defenders side",
+      "Ialitaris's ally Onestad joined the war on defenders side",
+      "Ialitaris's ally Breisach joined the war on defenders side",
+      "Ialitaris's ally Gongshingia joined the war on defenders side",
+      "Kamaile's ally Sasbachia joined the war on attackers side",
+      "Kamaile's ally Meragubia joined the war on attackers side",
+      "Kamaile's ally Straudens joined the war on attackers side"
+     ],
+     [
+      "Ros-Sesosian War",
+      "Ros declared a war on its rival Sesosia",
+      "Sesosia's ally Zahuahuaco joined the war on defenders side",
+      "Sesosia's ally Ialitaris joined the war on defenders side"
+     ],
+     [
+      "Laupsland-Sesosian War",
+      "Laupsland declared a war on its rival Sesosia",
+      "Sesosia's ally Zahuahuaco joined the war on defenders side",
+      "Sesosia's ally Ialitaris joined the war on defenders side"
+     ],
+     [
+      "Nafendorf-Breisachian War",
+      "Nafendorf declared a war on its rival Breisach",
+      "Breisach's ally Lohia joined the war on defenders side",
+      "Breisach's ally Onestad joined the war on defenders side",
+      "Breisach's ally Ialitaris joined the war on defenders side"
+     ]
+    ],
+    "urban": 0,
+    "rural": 0,
+    "burgs": 0,
+    "area": 66026,
+    "provinces": []
+   },
+   {
+    "i": 1,
+    "name": "Lohia",
+    "expansionism": 4.8,
+    "capital": 1,
+    "type": "River",
+    "center": 4589,
+    "culture": 2,
+    "pole": [
+     191,
+     635
+    ],
+    "neighbors": [
+     15,
+     2,
+     16,
+     9
+    ],
+    "color": "#66c2a5",
+    "diplomacy": [
+     "x",
+     "x",
+     "Enemy",
+     "Ally",
+     "Neutral",
+     "Ally",
+     "Enemy",
+     "Enemy",
+     "Enemy",
+     "Suspicion",
+     "Unknown",
+     "Friendly",
+     "Enemy",
+     "Neutral",
+     "Neutral",
+     "Suspicion",
+     "Enemy",
+     "Ally",
+     "Unknown",
+     "Unknown",
+     "Neutral"
+    ],
+    "urban": 354.43500000000006,
+    "rural": 3416.170060992241,
+    "burgs": 78,
+    "area": 66534,
+    "form": "Theocracy",
+    "formName": "Theocracy",
+    "fullName": "Lohian Theocracy",
+    "provinces": [
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10,
+     11,
+     12,
+     13,
+     14,
+     15,
+     16,
+     161,
+     162
+    ],
+    "alert": 1.03
+   },
+   {
+    "i": 2,
+    "name": "Gazd",
+    "expansionism": 3.1,
+    "capital": 2,
+    "type": "River",
+    "center": 3471,
+    "culture": 10,
+    "pole": [
+     168,
+     515
+    ],
+    "neighbors": [
+     1
+    ],
+    "color": "#fc8d62",
+    "diplomacy": [
+     "x",
+     "Enemy",
+     "x",
+     "Enemy",
+     "Neutral",
+     "Ally",
+     "Ally",
+     "Neutral",
+     "Neutral",
+     "Neutral",
+     "Unknown",
+     "Unknown",
+     "Neutral",
+     "Unknown",
+     "Neutral",
+     "Suspicion",
+     "Friendly",
+     "Unknown",
+     "Suspicion",
+     "Neutral",
+     "Neutral"
+    ],
+    "urban": 71.036,
+    "rural": 265.3886910676956,
+    "burgs": 7,
+    "area": 2299,
+    "form": "Monarchy",
+    "formName": "Duchy",
+    "fullName": "Duchy of Gazd",
+    "provinces": [
+     17,
+     18
+    ],
+    "alert": 5
+   },
+   {
+    "i": 3,
+    "name": "Tetelilco",
+    "expansionism": 5.5,
+    "capital": 3,
+    "type": "Generic",
+    "center": 3139,
+    "culture": 5,
+    "pole": [
+     525,
+     455
+    ],
+    "neighbors": [
+     14,
+     15,
+     6,
+     17,
+     19
+    ],
+    "color": "#8da0cb",
+    "diplomacy": [
+     "x",
+     "Ally",
+     "Enemy",
+     "x",
+     "Neutral",
+     "Ally",
+     "Enemy",
+     "Enemy",
+     "Enemy",
+     "Ally",
+     "Friendly",
+     "Friendly",
+     "Enemy",
+     "Friendly",
+     "Suspicion",
+     "Suspicion",
+     "Neutral",
+     "Suspicion",
+     "Neutral",
+     "Rival",
+     "Unknown"
+    ],
+    "urban": 122.039,
+    "rural": 1017.0212155580521,
+    "burgs": 34,
+    "area": 17073,
+    "form": "Theocracy",
+    "formName": "Theocracy",
+    "fullName": "Tetelilcan Theocracy",
+    "provinces": [
+     19,
+     20,
+     21,
+     22,
+     23,
+     24,
+     25,
+     163,
+     164
+    ],
+    "alert": 3.93
+   }
+  ],
+  "cultures": [
+   {
+    "name": "Wildlands",
+    "i": 0,
+    "base": 1,
+    "origins": [
+     null
+    ],
+    "shield": "round"
+   },
+   {
+    "name": "Valadi",
+    "base": 15,
+    "shield": "oval",
+    "center": 2319,
+    "i": 1,
+    "color": "#dababf",
+    "type": "Generic",
+    "expansionism": 1.9,
+    "origins": [
+     0
+    ],
+    "code": "Va"
+   },
+   {
+    "name": "Tinshui",
+    "base": 30,
+    "shield": "heater",
+    "center": 4589,
+    "i": 2,
+    "color": "#6e40aa",
+    "type": "River",
+    "expansionism": 3.4,
+    "origins": [
+     0
+    ],
+    "code": "Ti"
+   },
+   {
+    "name": "Trover",
+    "base": 6,
+    "shield": "fantasy3",
+    "center": 5466,
+    "i": 3,
+    "color": "#fccde5",
+    "type": "Generic",
+    "expansionism": 2.6,
+    "origins": [
+     0
+    ],
+    "code": "Tr"
+   }
+  ],
+  "religions": [
+   {
+    "name": "No religion",
+    "i": 0,
+    "origins": null
+   },
+   {
+    "name": "Valadi Ancestors",
+    "type": "Folk",
+    "form": "Ancestor Worship",
+    "culture": 1,
+    "center": 2319,
+    "deity": "Bacsete, The Yellow Goat",
+    "expansion": "culture",
+    "expansionism": 0,
+    "color": "#dababf",
+    "i": 1,
+    "code": "VA",
+    "origins": [
+     0
+    ]
+   },
+   {
+    "name": "Tinshui Beliefs",
+    "type": "Folk",
+    "form": "Nature Worship",
+    "culture": 2,
+    "center": 3452,
+    "deity": "Tsimshing, The Teal Divine One",
+    "expansion": "culture",
+    "expansionism": 0,
+    "color": "#6e40aa",
+    "i": 2,
+    "code": "TB",
+    "origins": [
+     0
+    ]
+   }
+  ],
+  "provinces": [
+   0,
+   {
+    "i": 1,
+    "state": 1,
+    "center": 4589,
+    "burg": 1,
+    "name": "Longong",
+    "formName": "Parish",
+    "fullName": "Longong Parish",
+    "color": "#62d5c2",
+    "pole": [
+     229,
+     567
+    ]
+   },
+   {
+    "i": 2,
+    "state": 1,
+    "center": 4751,
+    "burg": 538,
+    "name": "Namshan",
+    "formName": "Parish",
+    "fullName": "Namshan Parish",
+    "color": "#81e2a7",
+    "pole": [
+     208,
+     628
+    ]
+   },
+   {
+    "i": 3,
+    "state": 1,
+    "center": 5062,
+    "burg": 150,
+    "name": "Ngwamyuenia",
+    "formName": "Parish",
+    "fullName": "Ngwamyuenia Parish",
+    "color": "#68ccc5",
+    "pole": [
+     258,
+     611
+    ]
+   }
+  ],
+  "burgs": [
+   0,
+   {
+    "cell": 4589,
+    "x": 216.85,
+    "y": 585.12,
+    "i": 1,
+    "state": 1,
+    "culture": 2,
+    "name": "Longong",
+    "feature": 23,
+    "capital": 1,
+    "population": 15.067,
+    "type": "River",
+    "citadel": 1,
+    "plaza": 1,
+    "walls": 1,
+    "shanty": 0,
+    "temple": 0,
+    "group": "capital"
+   },
+   {
+    "cell": 3471,
+    "x": 159.65,
+    "y": 496.25,
+    "i": 2,
+    "state": 2,
+    "culture": 10,
+    "name": "Krar",
+    "feature": 23,
+    "capital": 1,
+    "port": 1,
+    "population": 30.415,
+    "type": "Naval",
+    "citadel": 1,
+    "plaza": 1,
+    "walls": 1,
+    "shanty": 0,
+    "temple": 1,
+    "group": "capital"
+   },
+   {
+    "cell": 4426,
+    "x": 199.18,
+    "y": 566.31,
+    "i": 21,
+    "state": 1,
+    "culture": 2,
+    "name": "Yuengyaumun",
+    "feature": 23,
+    "capital": 0,
+    "population": 8.066,
+    "type": "River",
+    "citadel": 0,
+    "plaza": 0,
+    "walls": 0,
+    "shanty": 0,
+    "temple": 0,
+    "group": "town"
+   },
+   {
+    "cell": 6190,
+    "x": 433.02,
+    "y": 721.77,
+    "i": 22,
+    "state": 9,
+    "culture": 4,
+    "name": "Rineiguro",
+    "feature": 23,
+    "capital": 0,
+    "population": 6.745,
+    "type": "River",
+    "citadel": 1,
+    "plaza": 0,
+    "walls": 1,
+    "shanty": 0,
+    "temple": 0,
+    "group": "town"
+   },
+   {
+    "cell": 6508,
+    "x": 1440.02,
+    "y": 746.55,
+    "i": 23,
+    "state": 4,
+    "culture": 8,
+    "name": "Ehriedt",
+    "feature": 26,
+    "capital": 0,
+    "population": 6.074,
+    "type": "Generic",
+    "citadel": 0,
+    "plaza": 1,
+    "walls": 0,
+    "shanty": 0,
+    "temple": 0,
+    "group": "town"
+   }
+  ],
+  "rivers": [
+   {
+    "i": 2,
+    "source": 6908,
+    "mouth": 6903,
+    "discharge": 1066,
+    "length": 118.83,
+    "width": 0.34,
+    "widthFactor": 1.2,
+    "sourceWidth": 0.16,
+    "parent": 2,
+    "basin": 2,
+    "name": "Ngauping",
+    "type": "River"
+   },
+   {
+    "i": 3,
+    "source": 5691,
+    "mouth": 4750,
+    "discharge": 1371,
+    "length": 153.68,
+    "width": 0.35,
+    "widthFactor": 1,
+    "sourceWidth": 0.19,
+    "parent": 4,
+    "basin": 4,
+    "name": "Lungongmun",
+    "type": "Fork"
+   },
+   {
+    "i": 4,
+    "source": 6665,
+    "mouth": 3471,
+    "discharge": 4224,
+    "length": 438.08,
+    "width": 1.15,
+    "widthFactor": 1.2,
+    "sourceWidth": 0.13,
+    "parent": 0,
+    "basin": 4,
+    "name": "Nelbaz",
+    "type": "River"
+   }
+  ],
+  "markers": [
+   {
+    "icon": "\ud83c\udf0b",
+    "type": "volcanoes",
+    "dx": 52,
+    "px": 13,
+    "x": 212.14,
+    "y": 702.43,
+    "cell": 5931,
+    "i": 0
+   },
+   {
+    "icon": "\ud83c\udf0b",
+    "type": "volcanoes",
+    "dx": 52,
+    "px": 13,
+    "x": 779.29,
+    "y": 181.43,
+    "cell": 809,
+    "i": 1
+   },
+   {
+    "icon": "\u2668\ufe0f",
+    "type": "hot-springs",
+    "dy": 52,
+    "x": 649.1,
+    "y": 348.9,
+    "cell": 2150,
+    "i": 2
+   }
+  ],
+  "zones": [
+   {
+    "i": 0,
+    "name": "Tetelilcan Incursion",
+    "type": "Invasion",
+    "color": "url(#hatch1)"
+   },
+   {
+    "i": 1,
+    "name": "Vexuman Insurrection",
+    "type": "Rebels",
+    "color": "url(#hatch3)"
+   }
+  ],
+  "features": [
+   0,
+   {
+    "i": 1,
+    "type": "ocean",
+    "land": false,
+    "border": true,
+    "firstCell": 0,
+    "area": 0,
+    "height": 0
+   },
+   {
+    "i": 2,
+    "type": "island",
+    "land": true,
+    "border": false,
+    "firstCell": 28,
+    "area": 208252,
+    "height": 0,
+    "group": "continent"
+   },
+   {
+    "i": 3,
+    "type": "lake",
+    "land": false,
+    "border": false,
+    "firstCell": 407,
+    "area": 263,
+    "height": 30.9,
+    "flux": 842,
+    "temp": 5,
+    "evaporation": 6,
+    "inlets": [
+     145,
+     439,
+     158
+    ],
+    "outlet": 158,
+    "group": "freshwater",
+    "name": "Skipton"
+   }
+  ]
+ }
+}
