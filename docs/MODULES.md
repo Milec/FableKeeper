@@ -223,9 +223,21 @@ Two implementation details are worth knowing before editing these forms:
   submitted form; the panels are hidden with
   `data-[state=inactive]:hidden` instead.
 
-`updateCharacter` reads the existing `data` jsonb and spreads the form-owned
-fields over it, so values only a Pathbuilder import supplies (spells, alignment)
-survive a manual edit.
+`src/lib/characters/form-data.ts` holds the pure `FormData` → `data` jsonb
+parsers, kept out of `actions.ts` so they are unit-testable without a Supabase
+client. The **merge rules are the subtle part**, because the editors expose less
+than a Pathbuilder import stores and a naive write-back destroys the difference:
+
+- `updateCharacter` spreads the form-owned fields over the existing `data`, so
+  keys with no UI at all (spells, alignment) survive an edit.
+- `proficiencies` is **merged, not replaced**: Pathbuilder keeps armour, weapon,
+  and spellcasting proficiencies in the same map the rank editor writes to.
+- `feats` and `equipment` are **matched by name against the stored entries**, so
+  an unchanged row is written back as its original tuple. A Pathbuilder feat is
+  `[name, source, type, level]`; the editor only shows the name, so flattening
+  would throw the rest away.
+
+Tests in `form-data.test.ts` pin each of these rules.
 
 ## Encounters & Rollable Tables (Phase 5)
 
