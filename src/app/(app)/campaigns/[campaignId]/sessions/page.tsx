@@ -24,7 +24,7 @@ export default async function SessionsPage({
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="flex items-center gap-2 font-display text-2xl font-bold">
           <ScrollText className="h-6 w-6 text-primary" />
           Sessions

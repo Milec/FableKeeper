@@ -11,7 +11,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { formatDate } from "@/lib/utils";
+import { formatDate, greetingName } from "@/lib/utils";
 import { CreateCampaignForm } from "./create-campaign-dialog";
 
 export const metadata: Metadata = { title: "Dashboard" };
@@ -27,15 +27,14 @@ export default async function DashboardPage() {
   const user = await requireUser();
   const campaigns = await getUserCampaigns();
 
-  const greetingName =
-    user.profile?.display_name || user.email?.split("@")[0] || "Keeper";
+  const name = greetingName(user.profile?.display_name, user.email);
 
   return (
     <div className="mx-auto max-w-5xl space-y-8">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="font-display text-3xl font-bold">
-            Welcome back, {greetingName}
+            Welcome back, {name}
           </h1>
           <p className="text-muted-foreground">
             Your campaigns and tools, all in one place.

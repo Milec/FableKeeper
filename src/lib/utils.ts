@@ -43,3 +43,30 @@ export function pickWeighted<T>(
   // Fallback for floating point edge cases.
   return items[items.length - 1]!.value;
 }
+
+/**
+ * A name to greet someone by.
+ *
+ * Falls back to the email local part when no display name is set, but tidies it
+ * first: raw local parts like `ada.lovelace3` read badly in a large display-font
+ * heading. Separators become spaces, trailing digits are dropped, and each word
+ * is capitalised — `ada.lovelace3` becomes "Ada Lovelace".
+ */
+export function greetingName(
+  displayName: string | null | undefined,
+  email: string | null | undefined,
+): string {
+  const explicit = displayName?.trim();
+  if (explicit) return explicit;
+
+  const local = email?.split("@")[0] ?? "";
+  const words = local
+    .split(/[._\-+]+/)
+    .map((part) => part.replace(/\d+$/, ""))
+    .filter(Boolean)
+    .map((part) => part[0]!.toUpperCase() + part.slice(1));
+
+  if (!words.length) return "Keeper";
+  // Two words is a name; more is usually an address, not something to read out.
+  return words.slice(0, 2).join(" ");
+}
