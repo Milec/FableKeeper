@@ -259,6 +259,23 @@ export function AzgaarImport({
           )}
 
           <label className="flex items-start gap-2 text-sm">
+            <input
+              type="checkbox"
+              name="createMap"
+              defaultChecked
+              value="on"
+              className="mt-0.5 accent-primary"
+            />
+            <span>
+              Also build an interactive map
+              <span className="block text-xs text-muted-foreground">
+                Drops a pin for every settlement and site, linked to its article.
+                Upload the map picture afterwards.
+              </span>
+            </span>
+          </label>
+
+          <label className="flex items-start gap-2 text-sm">
             <input type="checkbox" name="secret" className="mt-0.5 accent-primary" />
             <span>
               Import as GM-only
@@ -327,6 +344,7 @@ function ImportSummary({
           </p>
           <p className="text-sm text-muted-foreground">
             {result.links.toLocaleString()} links created between them
+            {result.pins > 0 && ` · ${result.pins.toLocaleString()} map pins placed`}
             {result.skipped > 0 &&
               ` · ${result.skipped.toLocaleString()} already existed and were left alone`}
           </p>
@@ -344,7 +362,14 @@ function ImportSummary({
       </div>
 
       <div className="flex flex-wrap gap-2">
-        <Button asChild>
+        {result.mapId && (
+          <Button asChild>
+            <Link href={`/campaigns/${campaignId}/maps/${result.mapId}`}>
+              Open the map
+            </Link>
+          </Button>
+        )}
+        <Button variant={result.mapId ? "outline" : "default"} asChild>
           <Link href={`/campaigns/${campaignId}/worlds/${worldId}`}>
             Open the world
           </Link>

@@ -4,13 +4,15 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { extractWikiLinks } from "@/lib/world/wikilinks";
-import { AzgaarParseError, parseAzgaarMap } from "./azgaar";
+import { AzgaarParseError, parseAzgaarMap, type AzgaarMap } from "./azgaar";
+import { buildPinDrafts } from "./pins";
 import {
   buildEntryDrafts,
   IMPORT_GROUPS,
   type EntryDraft,
   type ImportGroup,
 } from "./entries";
+import type { Json } from "@/types/database";
 
 export interface ImportActionState {
   error?: string;
@@ -25,6 +27,9 @@ export interface ImportResult {
   links: number;
   byType: Record<string, number>;
   mapName: string | null;
+  /** The interactive map created for this import, when pins were placed. */
+  mapId: string | null;
+  pins: number;
 }
 
 const schema = z.object({
@@ -33,6 +38,8 @@ const schema = z.object({
   groups: z.array(z.enum(IMPORT_GROUPS)).min(1, "Choose at least one thing to import."),
   minBurgPopulation: z.coerce.number().int().min(0).max(10_000_000),
   secret: z.boolean(),
+  /** Also create an interactive map with a pin per settlement and site. */
+  createMap: z.boolean(),
 });
 
 /**
@@ -57,6 +64,7 @@ export async function importAzgaarMap(
     groups: formData.getAll("groups").filter((g): g is string => typeof g === "string"),
     minBurgPopulation: formData.get("minBurgPopulation") || 0,
     secret: formData.get("secret") === "on",
+    createMap: formData.get("createMap") !== "off",
   });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
@@ -68,11 +76,10 @@ export async function importAzgaarMap(
   }
 
   let drafts: EntryDraft[];
-  let mapName: string | null;
+  let azgaar: AzgaarMap;
   try {
-    const map = parseAzgaarMap(json);
-    mapName = map.info.mapName;
-    drafts = buildEntryDrafts(map, {
+    azgaar = parseAzgaarMap(json);
+    drafts = buildEntryDrafts(azgaar, {
       groups: parsed.data.groups as ImportGroup[],
       minBurgPopulation: parsed.data.minBurgPopulation,
     });
@@ -154,6 +161,18 @@ export async function importAzgaarMap(
 
   const links = await linkImportedEntries(supabase, parsed.data.worldId, fresh, inserted);
 
+  const map = parsed.data.createMap
+    ? await createMapWithPins(supabase, {
+        campaignId: parsed.data.campaignId,
+        worldId: parsed.data.worldId,
+        userId: user.id,
+        azgaar,
+        drafts,
+        minBurgPopulation: parsed.data.minBurgPopulation,
+        revealed: !parsed.data.secret,
+      })
+    : { mapId: null, pins: 0 };
+
   const byType: Record<string, number> = {};
   for (const draft of fresh) byType[draft.type] = (byType[draft.type] ?? 0) + 1;
 
@@ -161,8 +180,86 @@ export async function importAzgaarMap(
   revalidatePath(`/campaigns/${parsed.data.campaignId}/maps`);
 
   return {
-    result: { created: inserted.length, skipped, links, byType, mapName },
+    result: {
+      created: inserted.length,
+      skipped,
+      links,
+      byType,
+      mapName: azgaar.info.mapName,
+      mapId: map.mapId,
+      pins: map.pins,
+    },
   };
+}
+
+/**
+ * Create the interactive map and its pins.
+ *
+ * Pins resolve to articles by slug against the whole world, so a pin still finds
+ * its article when the entry already existed from an earlier import.
+ *
+ * A failure here doesn't fail the import: the articles are the substance, and
+ * the map can be re-created by importing again.
+ */
+async function createMapWithPins(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  opts: {
+    campaignId: string;
+    worldId: string;
+    userId: string;
+    azgaar: AzgaarMap;
+    drafts: EntryDraft[];
+    minBurgPopulation: number;
+    revealed: boolean;
+  },
+): Promise<{ mapId: string | null; pins: number }> {
+  const pinDrafts = buildPinDrafts(opts.azgaar, opts.drafts, {
+    minBurgPopulation: opts.minBurgPopulation,
+  });
+  if (!pinDrafts.length) return { mapId: null, pins: 0 };
+
+  const { data: map, error } = await supabase
+    .from("maps")
+    .insert({
+      campaign_id: opts.campaignId,
+      world_id: opts.worldId,
+      name: opts.azgaar.info.mapName ?? "Imported map",
+      source: {
+        source: "azgaar",
+        version: opts.azgaar.info.version,
+        seed: opts.azgaar.info.seed,
+        width: opts.azgaar.info.width,
+        height: opts.azgaar.info.height,
+      } as unknown as Json,
+      created_by: opts.userId,
+    })
+    .select("id")
+    .single();
+  if (error || !map) return { mapId: null, pins: 0 };
+
+  const { data: entries } = await supabase
+    .from("world_entries")
+    .select("id, slug")
+    .eq("world_id", opts.worldId);
+  const idBySlug = new Map((entries ?? []).map((e) => [e.slug, e.id]));
+
+  const rows = pinDrafts.map((pin) => ({
+    map_id: map.id,
+    campaign_id: opts.campaignId,
+    entry_id: pin.entrySlug ? (idBySlug.get(pin.entrySlug) ?? null) : null,
+    label: pin.label,
+    kind: pin.kind,
+    x: pin.x,
+    y: pin.y,
+    is_revealed: opts.revealed,
+  }));
+
+  let written = 0;
+  for (const batch of chunk(rows, INSERT_CHUNK)) {
+    const { error: pinError } = await supabase.from("map_pins").insert(batch);
+    if (!pinError) written += batch.length;
+  }
+  return { mapId: map.id, pins: written };
 }
 
 /**

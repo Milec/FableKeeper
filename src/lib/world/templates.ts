@@ -175,6 +175,7 @@ const TEMPLATES: Partial<Record<WorldEntryType, string>> = {
   kingdom: REGION,
   province: REGION,
   city: SETTLEMENT,
+  town: SETTLEMENT,
   village: SETTLEMENT,
   landmark: SITE,
   dungeon: SITE,

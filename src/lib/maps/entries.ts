@@ -68,15 +68,19 @@ export const GROUP_LABELS: Record<ImportGroup, string> = {
 };
 
 /**
- * A capital is always a city; otherwise population decides.
+ * Settlement size bands, in people.
  *
- * 5,000 is the classic line where a medieval settlement reads as a city rather
- * than a large village, and it matters which number is picked: the median burg on
- * a generated Azgaar map sits near 3,700, so a 2,000 threshold turns two thirds
- * of every map into cities. There is no Town entry type to split the difference,
- * and the GM can change any entry's type after import.
+ * A capital is always a city; otherwise population decides. The lines follow the
+ * usual medieval reading — a city is a seat of real power at 5,000+, a town is a
+ * market settlement, and below 1,000 it is a village. Getting these right matters
+ * because the median burg on a generated Azgaar map sits near 3,700: with only
+ * city and village to choose from, either two thirds of a map becomes "cities" or
+ * every market town is filed as a village.
+ *
+ * The GM can retype any entry after import.
  */
 const CITY_POPULATION_THRESHOLD = 5000;
+const TOWN_POPULATION_THRESHOLD = 1000;
 
 /**
  * Azgaar marker types that describe somewhere you can go *into*, which maps far
@@ -217,10 +221,12 @@ export function entryTypeForState(state: AzgaarState): WorldEntryType {
   return state.form === "Monarchy" ? "kingdom" : "nation";
 }
 
-/** Capitals and anything above the population threshold are cities. */
+/** A capital is a city regardless of size; otherwise population picks the band. */
 export function entryTypeForBurg(burg: AzgaarBurg): WorldEntryType {
   if (burg.isCapital) return "city";
-  return (burg.population ?? 0) >= CITY_POPULATION_THRESHOLD ? "city" : "village";
+  const population = burg.population ?? 0;
+  if (population >= CITY_POPULATION_THRESHOLD) return "city";
+  return population >= TOWN_POPULATION_THRESHOLD ? "town" : "village";
 }
 
 export function entryTypeForMarker(marker: AzgaarMarker): WorldEntryType {
@@ -348,7 +354,9 @@ function buildBurg(burg: AzgaarBurg, names: NameIndex, notes: AzgaarMap["notes"]
     ? `the capital${state ? " of " + (burg.stateId !== null ? names.states.get(burg.stateId) : "") : ""}`
     : type === "city"
       ? "a city"
-      : "a village";
+      : type === "town"
+        ? "a town"
+        : "a village";
   const summary = `${burg.name} is ${descriptor}${
     burg.population !== null ? `, home to roughly ${formatNumber(burg.population)} people` : ""
   }.`;

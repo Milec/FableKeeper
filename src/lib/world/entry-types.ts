@@ -55,6 +55,7 @@ export const ENTRY_TYPES: Record<WorldEntryType, EntryTypeMeta> = {
   kingdom: { type: "kingdom", label: "Kingdom", plural: "Kingdoms", category: "Geography", icon: Crown },
   province: { type: "province", label: "Province", plural: "Provinces", category: "Geography", icon: Landmark },
   city: { type: "city", label: "City", plural: "Cities", category: "Geography", icon: Landmark },
+  town: { type: "town", label: "Town", plural: "Towns", category: "Geography", icon: Landmark },
   village: { type: "village", label: "Village", plural: "Villages", category: "Geography", icon: Landmark },
   landmark: { type: "landmark", label: "Landmark", plural: "Landmarks", category: "Geography", icon: Mountain },
   dungeon: { type: "dungeon", label: "Dungeon", plural: "Dungeons", category: "Geography", icon: Skull },

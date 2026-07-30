@@ -7,6 +7,7 @@ import {
   entryTypeForState,
   summarizeMap,
 } from "./entries";
+import { buildPinDrafts } from "./pins";
 import demo from "./__fixtures__/azgaar-demo.json";
 
 /**
@@ -155,11 +156,16 @@ describe("entry type mapping", () => {
   });
 
   it("sizes settlements by capital status then population", () => {
+    // A capital is a city however small it is.
     expect(entryTypeForBurg({ isCapital: true, population: 40 } as never)).toBe("city");
     expect(entryTypeForBurg({ isCapital: false, population: 9000 } as never)).toBe("city");
     expect(entryTypeForBurg({ isCapital: false, population: 5000 } as never)).toBe("city");
-    // The median burg on a generated map is ~3,700, so this must stay a village.
-    expect(entryTypeForBurg({ isCapital: false, population: 3700 } as never)).toBe("village");
+    // The median burg on a generated map is ~3,700 — a town, not a city and not
+    // a village.
+    expect(entryTypeForBurg({ isCapital: false, population: 4999 } as never)).toBe("town");
+    expect(entryTypeForBurg({ isCapital: false, population: 3700 } as never)).toBe("town");
+    expect(entryTypeForBurg({ isCapital: false, population: 1000 } as never)).toBe("town");
+    expect(entryTypeForBurg({ isCapital: false, population: 999 } as never)).toBe("village");
     expect(entryTypeForBurg({ isCapital: false, population: 400 } as never)).toBe("village");
     expect(entryTypeForBurg({ isCapital: false, population: null } as never)).toBe("village");
   });
@@ -352,5 +358,61 @@ describe("compactAzgaarExport", () => {
   it("reports unreadable input before anything is uploaded", () => {
     expect(() => compactAzgaarExport("nope")).toThrow(AzgaarParseError);
     expect(() => compactAzgaarExport("[1,2]")).toThrow(/JSON object/);
+  });
+});
+
+describe("buildPinDrafts", () => {
+  const drafts = buildEntryDrafts(map);
+  const pins = buildPinDrafts(map, drafts);
+
+  it("normalises Azgaar's pixel coordinates to fractions of the image", () => {
+    // Longong sits at 216.85, 585.12 on a 1680 x 849 map.
+    const longong = pins.find((p) => p.label === "Longong")!;
+    expect(longong.x).toBeCloseTo(216.85 / 1680, 6);
+    expect(longong.y).toBeCloseTo(585.12 / 849, 6);
+    for (const pin of pins) {
+      expect(pin.x).toBeGreaterThanOrEqual(0);
+      expect(pin.x).toBeLessThanOrEqual(1);
+      expect(pin.y).toBeGreaterThanOrEqual(0);
+      expect(pin.y).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it("points a pin at its own article, not a same-named one", () => {
+    // The province "Longong" takes the `longong` slug because provinces are
+    // built first, so the city must carry the suffixed one.
+    const cityDraft = drafts.find((d) => d.group === "burgs" && d.title === "Longong")!;
+    const provinceDraft = drafts.find(
+      (d) => d.group === "provinces" && d.title === "Longong",
+    )!;
+    expect(cityDraft.slug).not.toBe(provinceDraft.slug);
+    expect(pins.find((p) => p.label === "Longong")!.entrySlug).toBe(cityDraft.slug);
+  });
+
+  it("carries the entry type as the pin kind", () => {
+    expect(pins.find((p) => p.label === "Longong")!.kind).toBe("city");
+    expect(pins.find((p) => p.label === "Chishambe Volcano")!.kind).toBe("landmark");
+  });
+
+  it("names marker pins from the map notes", () => {
+    expect(pins.some((p) => p.label === "Chishambe Volcano")).toBe(true);
+    expect(pins.some((p) => p.label === "Mount Tother")).toBe(true);
+  });
+
+  it("honours the population filter and the marker toggle", () => {
+    const few = buildPinDrafts(map, drafts, {
+      minBurgPopulation: 1_000_000,
+      includeMarkers: false,
+    });
+    // Only the two capitals survive, and no markers.
+    expect(few.map((p) => p.label)).toEqual(["Longong", "Krar"]);
+  });
+
+  it("returns nothing rather than guessing when dimensions are missing", () => {
+    // A wrong denominator would silently place every pin in the wrong spot.
+    const sizeless = parseAzgaarMap(
+      JSON.stringify({ ...demo, info: { ...demo.info, width: 0, height: 0 } }),
+    );
+    expect(buildPinDrafts(sizeless, drafts)).toEqual([]);
   });
 });

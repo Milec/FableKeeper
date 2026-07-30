@@ -323,10 +323,37 @@ not inferred, and each one silently corrupts an import if missed:
   the marker. FMG's generated legends are real flavour text and lead the article.
 - **Populations are scaled**: `population * populationRate * urbanization`.
 
-The city/village split uses a 5,000-person threshold. The number matters — the
-median burg on a generated map sits near 3,700, so a lower line turns most of the
-map into cities. Capitals are always cities, and there is no Town type to split
-the difference.
+Settlements split three ways: **city** at 5,000+, **town** at 1,000+, **village**
+below that, with capitals always cities. The bands matter — the median burg on a
+generated map sits near 3,700, so with only city and village either two thirds of
+a map becomes "cities" or every market town is filed as a village. Migration
+`0009` adds the `town` entry type for this.
 
 Re-importing the same map is safe: entries whose slug already exists are left
 untouched rather than overwritten, since the GM has probably edited them.
+
+### The map viewer
+
+`maps` holds an image plus `map_pins`. Pins store **normalised coordinates**
+(0–1 of the image on each axis) rather than pixels, because Azgaar records
+positions in the pixel space of the map *it* generated (`info.width` ×
+`info.height`) while the GM exports the picture at whatever resolution they like,
+and may swap in a tidied version later. Fractions survive all of that.
+
+Two consequences worth keeping in mind when touching `map-viewer.tsx`:
+
+- **The frame's aspect ratio is measured from the image on load**, not
+  hard-coded. Pins are positioned as percentages of the frame, so if the frame's
+  ratio doesn't match the image, `object-contain` letterboxes the image inside it
+  and every pin drifts.
+- **Pins counter-scale with zoom** (`scale(1/zoom)`) so they stay a constant
+  on-screen size instead of ballooning as the map is magnified.
+
+`buildPinDrafts` resolves a pin to its article through the entry drafts rather
+than by re-slugifying the name. The draft builder de-duplicates slug collisions,
+and Azgaar names a province after its seat burg — re-deriving the slug would
+point a city's pin at the province's article.
+
+**Fog of war** is per pin: `map_pins.is_revealed` gates player visibility in the
+RLS select policy, while campaign editors always see everything so they can
+reveal it. The viewer toggles optimistically and rolls back if the action fails.

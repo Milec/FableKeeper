@@ -6,6 +6,7 @@ import { can } from "@/lib/permissions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { AzgaarImport } from "@/modules/maps/azgaar-import";
+import { getMaps } from "@/lib/maps/queries";
 
 export default async function MapsPage({
   params,
@@ -19,6 +20,7 @@ export default async function MapsPage({
   const canEdit = can(campaign.role, "world:edit");
   const worlds = await getWorlds(campaignId);
   const world = worlds[0];
+  const maps = await getMaps(campaignId);
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
@@ -33,6 +35,29 @@ export default async function MapsPage({
           articles.
         </p>
       </div>
+
+      {maps.length > 0 && (
+        <section className="space-y-2">
+          <h2 className="text-sm font-semibold text-muted-foreground">Your maps</h2>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {maps.map((m) => (
+              <Link
+                key={m.id}
+                href={`/campaigns/${campaignId}/maps/${m.id}`}
+                className="flex items-center gap-3 rounded-lg border p-3 transition-colors hover:bg-muted/50"
+              >
+                <MapIcon className="h-5 w-5 shrink-0 text-primary" />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate font-medium">{m.name}</span>
+                  <span className="block truncate text-xs text-muted-foreground">
+                    {m.image_url ? "Open the map" : "No image yet — add one"}
+                  </span>
+                </span>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
 
       {!canEdit ? (
         <Card>
