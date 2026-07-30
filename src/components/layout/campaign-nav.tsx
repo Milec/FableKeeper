@@ -7,6 +7,7 @@ import {
   Dices,
   Globe2,
   ListChecks,
+  Map as MapIcon,
   ScrollText,
   Swords,
   Users,
@@ -28,6 +29,7 @@ export function CampaignNav({ campaignId }: { campaignId: string }) {
     { href: `${base}/quests`, label: "Quests", icon: ListChecks },
     { href: `${base}/encounters`, label: "Encounters", icon: Swords },
     { href: `${base}/tables`, label: "Tables", icon: Dices },
+    { href: `${base}/maps`, label: "Maps", icon: MapIcon },
   ];
 
   return (

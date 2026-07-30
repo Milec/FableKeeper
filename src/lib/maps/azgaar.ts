@@ -37,6 +37,111 @@
  * rates from `settings`.
  */
 
+/**
+ * Shrink a raw export down to what the importer reads, before it is uploaded.
+ *
+ * A Full export is routinely 10–40 MB — mostly `grid`, the per-cell arrays, the
+ * SVG path data, and a coat-of-arms blazon on every burg, state, and province.
+ * None of that is used here, and none of it will fit through a Server Action.
+ *
+ * The one thing worth keeping from `pack.cells` is the province and religion of
+ * the cells that hold a burg, since a burg records neither itself. Reducing the
+ * cell array to just those entries keeps the import lossless while dropping
+ * essentially all of the weight.
+ *
+ * Returns the compacted JSON string. Throws `AzgaarParseError` on input that
+ * isn't a readable export, so the caller can report it before uploading.
+ */
+export function compactAzgaarExport(json: string): string {
+  let root: unknown;
+  try {
+    root = JSON.parse(json);
+  } catch {
+    throw new AzgaarParseError(
+      "That isn't valid JSON. Use Azgaar's Export → JSON (Full or Minimal), not the .map save file.",
+    );
+  }
+  const doc = asRecord(root);
+  if (!doc) throw new AzgaarParseError("Expected a JSON object at the top level.");
+
+  const pack = asRecord(doc.pack) ?? asRecord(doc.cells) ?? doc;
+
+  // Cells that hold a burg, so burg → province/religion survives compaction.
+  const burgCells = new Set<number>();
+  if (Array.isArray(pack.burgs)) {
+    for (const burg of pack.burgs) {
+      const cell = num(asRecord(burg)?.cell);
+      if (cell !== null) burgCells.add(cell);
+    }
+  }
+  const cells: { i: number; province?: number; religion?: number }[] = [];
+  if (Array.isArray(pack.cells)) {
+    for (const entry of pack.cells) {
+      const rec = asRecord(entry);
+      const id = num(rec?.i);
+      if (!rec || id === null || !burgCells.has(id)) continue;
+      const province = num(rec.province);
+      const religion = num(rec.religion);
+      cells.push({
+        i: id,
+        ...(province !== null && province > 0 ? { province } : {}),
+        ...(religion !== null && religion > 0 ? { religion } : {}),
+      });
+    }
+  }
+
+  /** Drop the heavy per-entity fields that only matter for rendering. */
+  const slim = (value: unknown): unknown => {
+    if (!Array.isArray(value)) return undefined;
+    return value.map((entry) => {
+      const rec = asRecord(entry);
+      if (!rec) return entry;
+      const {
+        coa: _coa,
+        vertices: _vertices,
+        shoreline: _shoreline,
+        points: _points,
+        military: _military,
+        campaigns: _campaigns,
+        production: _production,
+        ...rest
+      } = rec;
+      return rest;
+    });
+  };
+
+  const slimPack: Record<string, unknown> = {};
+  for (const key of [
+    "burgs",
+    "states",
+    "provinces",
+    "cultures",
+    "religions",
+    "rivers",
+    "markers",
+    "zones",
+    "features",
+  ]) {
+    const value = slim(pack[key]);
+    if (value) slimPack[key] = value;
+  }
+  if (cells.length) slimPack.cells = cells;
+
+  return JSON.stringify({
+    info: doc.info ?? null,
+    settings: asRecord(doc.settings)
+      ? {
+          populationRate: (doc.settings as Record<string, unknown>).populationRate,
+          urbanization: (doc.settings as Record<string, unknown>).urbanization,
+          distanceUnit: (doc.settings as Record<string, unknown>).distanceUnit,
+          mapName: (doc.settings as Record<string, unknown>).mapName,
+        }
+      : null,
+    notes: doc.notes ?? null,
+    pack: slimPack,
+  });
+}
+
 export class AzgaarParseError extends Error {
   constructor(message: string) {
     super(message);

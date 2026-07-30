@@ -280,3 +280,53 @@ The registry already lists the roadmap modules (World Builder, Characters,
 Campaign Manager, Encounter Builder, Generators, Shop Generator, Interactive
 Maps, AI Assist) as `planned`, so they appear in the UI as "coming soon" and can
 be activated as each is built.
+
+## Interactive Maps (Phase 6)
+
+The module's first capability is **cross-compatibility with Azgaar's Fantasy Map
+Generator**: import a map's JSON export and it becomes a connected set of World
+Builder articles.
+
+- `src/lib/maps/azgaar.ts` — parses FMG's Full and Minimal export shapes (both
+  nest entities under `pack`) and normalises its terse fields. Also exports
+  `compactAzgaarExport`, which the client runs **before uploading**.
+- `src/lib/maps/entries.ts` — maps each entity onto the entry type that matches
+  what it is (Monarchy → Kingdom, `ruins` marker → Ruin, `caves` → Dungeon) and
+  writes `[[wiki links]]` between them.
+- `src/lib/maps/actions.ts` — the Server Action. Bulk-inserts in chunks and
+  resolves the whole backlink graph in memory from one lookup, rather than the
+  per-entry query the normal save path uses; a 600-entry import would otherwise
+  be 600 round trips.
+- `src/modules/maps/azgaar-import.tsx` — the import UI. Because the parser is
+  pure, **the same code previews the file in the browser** before anything is
+  uploaded: entity counts per group, per-type totals, and a population filter,
+  all live.
+
+### Things the format demands you get right
+
+These were established against Azgaar's own `tests/fixtures/demo.map` (v1.112),
+not inferred, and each one silently corrupts an import if missed:
+
+- **Index 0 is a placeholder in only some collections.** `states[0]` is
+  "Neutrals", `cultures[0]` "Wildlands", `religions[0]` "No religion" — all
+  meaning unclaimed. `burgs[0]`, `provinces[0]`, and `features[0]` are the
+  literal number `0`. But `markers[0]` and `zones[0]` are **real entities**, so a
+  blanket skip-id-0 rule drops the first marker and zone.
+- **`removed: true` entries stay in the array** — FMG tombstones to keep ids
+  stable.
+- **A burg records neither its province nor its religion.** Those live only in
+  the per-cell arrays, so they are recovered from `pack.cells`. This is why
+  compaction *reduces* the cell array to the burg-occupied cells rather than
+  dropping it: a real 1.7 MB export compacts to 0.38 MB with all 753 burgs still
+  fully linked.
+- **A marker's name is in the map notes** (`marker3` → "Mount Tother"), not on
+  the marker. FMG's generated legends are real flavour text and lead the article.
+- **Populations are scaled**: `population * populationRate * urbanization`.
+
+The city/village split uses a 5,000-person threshold. The number matters — the
+median burg on a generated map sits near 3,700, so a lower line turns most of the
+map into cities. Capitals are always cities, and there is no Town type to split
+the difference.
+
+Re-importing the same map is safe: entries whose slug already exists are left
+untouched rather than overwritten, since the GM has probably edited them.

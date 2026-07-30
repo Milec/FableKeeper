@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { AzgaarParseError, parseAzgaarMap } from "./azgaar";
+import { AzgaarParseError, compactAzgaarExport, parseAzgaarMap } from "./azgaar";
 import {
   buildEntryDrafts,
   entryTypeForBurg,
@@ -157,6 +157,9 @@ describe("entry type mapping", () => {
   it("sizes settlements by capital status then population", () => {
     expect(entryTypeForBurg({ isCapital: true, population: 40 } as never)).toBe("city");
     expect(entryTypeForBurg({ isCapital: false, population: 9000 } as never)).toBe("city");
+    expect(entryTypeForBurg({ isCapital: false, population: 5000 } as never)).toBe("city");
+    // The median burg on a generated map is ~3,700, so this must stay a village.
+    expect(entryTypeForBurg({ isCapital: false, population: 3700 } as never)).toBe("village");
     expect(entryTypeForBurg({ isCapital: false, population: 400 } as never)).toBe("village");
     expect(entryTypeForBurg({ isCapital: false, population: null } as never)).toBe("village");
   });
@@ -283,5 +286,71 @@ describe("buildEntryDrafts", () => {
       expect(draft.markdown).not.toContain("undefined");
       expect(draft.markdown).not.toMatch(/##\s*\n\s*\n##/);
     }
+  });
+});
+
+describe("compactAzgaarExport", () => {
+  it("strips the bulk while keeping everything the importer reads", () => {
+    // A Full export is mostly grid, cells, vertices, and coats of arms.
+    const bulky = {
+      ...demo,
+      grid: { cells: Array.from({ length: 5000 }, (_, i) => ({ i, h: 40, temp: 20 })) },
+      nameBases: Array.from({ length: 200 }, () => "padding".repeat(50)),
+      pack: {
+        ...demo.pack,
+        vertices: Array.from({ length: 5000 }, (_, i) => ({ i, p: [1, 2], v: [1, 2, 3] })),
+        cells: [
+          { i: 4589, province: 1, religion: 2, h: 40, biome: 5, pop: 3 },
+          // A cell with no burg carries nothing the importer needs.
+          { i: 99, province: 7, religion: 7 },
+        ],
+      },
+    };
+    const raw = JSON.stringify(bulky);
+    const compacted = compactAzgaarExport(raw);
+
+    expect(compacted.length).toBeLessThan(raw.length / 4);
+
+    const map = parseAzgaarMap(compacted);
+    // Every entity still parses…
+    expect(summarizeMap(map)).toEqual(summarizeMap(parseAzgaarMap(raw)));
+    // …and the burg's cell-derived links survive, which is the whole reason the
+    // cell array is reduced rather than dropped.
+    const longong = map.burgs.find((b) => b.name === "Longong")!;
+    expect(longong.provinceId).toBe(1);
+    expect(longong.religionId).toBe(2);
+  });
+
+  it("keeps only the cells that hold a burg", () => {
+    const burgCells = map.burgs.map((b) => b.cell!);
+    const compacted = JSON.parse(
+      compactAzgaarExport(
+        JSON.stringify({
+          ...demo,
+          pack: {
+            ...demo.pack,
+            cells: [
+              ...burgCells.map((i) => ({ i, province: 1, religion: 1 })),
+              // 500 cells with no burg on them, which carry nothing we need.
+              ...Array.from({ length: 500 }, (_, n) => ({ i: 900_000 + n, province: 2 })),
+            ],
+          },
+        }),
+      ),
+    );
+    expect(compacted.pack.cells).toHaveLength(burgCells.length);
+    expect(compacted.pack.cells.map((c: { i: number }) => c.i).sort()).toEqual(
+      [...burgCells].sort(),
+    );
+  });
+
+  it("preserves the notes that name markers", () => {
+    const compacted = parseAzgaarMap(compactAzgaarExport(JSON.stringify(demo)));
+    expect(compacted.notes.get("marker0")?.name).toBe("Chishambe Volcano");
+  });
+
+  it("reports unreadable input before anything is uploaded", () => {
+    expect(() => compactAzgaarExport("nope")).toThrow(AzgaarParseError);
+    expect(() => compactAzgaarExport("[1,2]")).toThrow(/JSON object/);
   });
 });

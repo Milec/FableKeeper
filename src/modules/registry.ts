@@ -110,10 +110,10 @@ export const MODULES: readonly ModuleDefinition[] = [
     id: "maps",
     name: "Interactive Maps",
     description:
-      "Zoomable player maps with fog of war and GM-controlled reveals.",
+      "Import Azgaar maps and turn them into linked world articles.",
     icon: MapIcon,
     phase: 6,
-    status: "planned",
+    status: "available",
     scope: "campaign",
     campaignPath: "/maps",
     requiredPermission: "map:view",

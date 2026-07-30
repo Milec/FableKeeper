@@ -60,6 +60,13 @@ FableKeeper is being built iteratively. **Phases 1–5 are implemented** in this
 - ✅ **JSON import/export**, folders, and tags for custom tables
 - ✅ Both build directly on the tested dice engine
 
+**Phase 6 — Interactive Maps**
+- ✅ **Azgaar's Fantasy Map Generator import** — drop in a map's JSON export and its states, provinces, cities, cultures, religions, rivers, landmarks, and zones become World Builder articles
+- ✅ **Cross-linked on arrival** — every city links to its state, province, culture, and religion with `[[wiki links]]`, so the backlink graph is populated the moment the import lands
+- ✅ **Typed to match reality** — a Monarchy imports as a Kingdom, a `ruins` marker as a Ruin, a cave as a Dungeon; Azgaar's generated legends become the article's opening prose
+- ✅ **Previewed in the browser first** — the same pure parser that runs on the server shows entity counts, per-type totals, and a population filter before anything uploads
+- ✅ **Re-import safe** — entries that already exist are left untouched, never overwritten
+
 See the [roadmap](#roadmap) for what comes next.
 
 ---

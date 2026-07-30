@@ -68,11 +68,15 @@ export const GROUP_LABELS: Record<ImportGroup, string> = {
 };
 
 /**
- * A capital is always a city; otherwise population decides. Azgaar has no
- * town/city distinction of its own, and 2,000 is roughly where a medieval
- * settlement stops reading as a village.
+ * A capital is always a city; otherwise population decides.
+ *
+ * 5,000 is the classic line where a medieval settlement reads as a city rather
+ * than a large village, and it matters which number is picked: the median burg on
+ * a generated Azgaar map sits near 3,700, so a 2,000 threshold turns two thirds
+ * of every map into cities. There is no Town entry type to split the difference,
+ * and the GM can change any entry's type after import.
  */
-const CITY_POPULATION_THRESHOLD = 2000;
+const CITY_POPULATION_THRESHOLD = 5000;
 
 /**
  * Azgaar marker types that describe somewhere you can go *into*, which maps far
