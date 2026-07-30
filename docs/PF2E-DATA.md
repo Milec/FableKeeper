@@ -33,7 +33,22 @@ community-maintained machine-readable mirror of Paizo's published mechanics.
 | Dataset | Contents | Size |
 | ------- | -------- | ---- |
 | `bestiary.json` | 1,156 creatures, levels −1 → 25 | ~150 KB (19 KB gzipped) |
-| `tables.json` | 18 tables (7 roll, 11 reference) | ~33 KB (9 KB gzipped) |
+| `tables.json` | 15 tables (4 roll, 11 reference) | ~33 KB (9 KB gzipped) |
+| `benchmarks.json` | Per-level stat percentiles, 27 levels | ~16 KB |
+
+### Level benchmarks
+
+`benchmarks.json` holds, for every creature level, the 25th/50th/75th percentiles
+(low / moderate / high) of AC, HP, Perception, each save, best attack bonus,
+average strike damage, and best ability modifier — **measured from the published
+creatures above**, along with the sample size behind each level.
+
+GM Core / the Gamemastery Guide publish design tables for exactly this purpose,
+but rather than reproduce those tables we measure what Paizo actually printed.
+That keeps us to observed facts and lands closer to how real stat blocks are
+distributed than the design targets do. The NPC stat block generator
+(`src/lib/generators/statblock.ts`) reads these, with the NPC's combat role
+selecting which percentile each statistic draws from.
 
 The bestiary is loaded through a **dynamic import** (`src/lib/bestiary/load.ts`)
 so it is code-split out of the main bundle and fetched only when the Encounter

@@ -179,8 +179,27 @@ Four generators live under `src/lib/generators/` (pure, unit-tested) with UIs in
   `…ToMarkdown` helper so a result can be copied straight into a World Builder
   entry.
 
+- `statblock.ts` — generates a full PF2E stat block for an NPC: AC, HP, saves,
+  Perception, skills, strikes with damage dice, and a spell DC for casters.
+  Numbers come from `benchmarks.json` (see [PF2E-DATA.md](./PF2E-DATA.md)), with
+  a **combat role** deciding which percentile each statistic draws from — so a
+  level-5 brute is tough but easy to hit, while a level-5 soldier is the reverse.
+  Roles also bound the level a role plausibly occupies: PF2E creature level *is*
+  the stat level, so a village fisher is generated at level −1/0 rather than
+  being statted as a level-4 creature with a warrior's AC and attack bonus.
+
 The generators run entirely client-side with no external services. The Name
-Generator stores favourites in `localStorage`. AI-assisted generation (Phase 6)
+Generator stores favourites in `localStorage`.
+
+### Character sheet
+
+`src/lib/characters/sheet.ts` derives everything a sheet displays from the stored
+character, following PF2E's maths (`level + proficiency rank + ability modifier`,
+with untrained skills getting no level bonus): all three saves, Perception, Class
+DC, the 16 skills plus Lores, spellcasting by rank, feats, inventory, coins,
+languages, and conditions. Pathbuilder imports already carried this data in the
+`data` jsonb; the sheet now surfaces it. Covered by unit tests that assert the
+derived numbers for a known level-5 character. AI-assisted generation (Phase 6)
 can layer on top of the same pure functions later without changing the UIs.
 
 ## Encounters & Rollable Tables (Phase 5)
