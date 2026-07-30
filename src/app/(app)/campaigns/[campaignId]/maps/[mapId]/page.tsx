@@ -65,6 +65,7 @@ export default async function MapPage({
       </div>
 
       <MapViewer
+        mapId={mapId}
         mapName={map.name}
         imageUrl={map.image_url}
         pins={viewerPins}

@@ -8,6 +8,7 @@ import {
   EyeOff,
   Home,
   ImageOff,
+  Loader2,
   Maximize2,
   Minus,
   Plus,
@@ -17,7 +18,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { setPinRevealed } from "@/lib/maps/pin-actions";
+import { setAllPinsRevealed, setPinRevealed } from "@/lib/maps/pin-actions";
 import type { MapPin } from "@/types/database";
 
 const MIN_ZOOM = 1;
@@ -43,11 +44,13 @@ export interface ViewerPin extends Pick<MapPin, "id" | "label" | "kind" | "x" | 
 }
 
 export function MapViewer({
+  mapId,
   mapName,
   imageUrl,
   pins,
   canReveal,
 }: {
+  mapId: string;
   mapName: string;
   imageUrl: string | null;
   pins: ViewerPin[];
@@ -65,6 +68,8 @@ export function MapViewer({
   // the image's aspect ratio exactly — otherwise object-contain letterboxes the
   // image inside it and every pin drifts. Measured from the image once it loads.
   const [aspect, setAspect] = React.useState<number | null>(null);
+  const [bulkPending, setBulkPending] = React.useState(false);
+  const [bulkError, setBulkError] = React.useState<string | null>(null);
   const frameRef = React.useRef<HTMLDivElement>(null);
   const drag = React.useRef<{ x: number; y: number; ox: number; oy: number } | null>(null);
 
@@ -131,6 +136,31 @@ export function MapViewer({
 
   const hiddenCount = pins.filter((p) => !isRevealed(p)).length;
 
+  /**
+   * Lift or drop the fog over the whole map at once.
+   *
+   * A GM starting a campaign wants everything hidden and reveals as the party
+   * travels; one importing a map their players already know wants the opposite.
+   * Doing either a pin at a time across several hundred pins is not a workflow.
+   */
+  async function revealAll(next: boolean) {
+    setBulkPending(true);
+    setBulkError(null);
+    setRevealed(Object.fromEntries(pins.map((p) => [p.id, next])));
+    try {
+      await setAllPinsRevealed(mapId, next);
+    } catch {
+      // Clearing the overrides falls every pin back to the server's own value,
+      // which is still what it was before this attempt.
+      setRevealed({});
+      setBulkError(
+        `Could not ${next ? "reveal" : "hide"} every location. Nothing was changed.`,
+      );
+    } finally {
+      setBulkPending(false);
+    }
+  }
+
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
@@ -178,18 +208,57 @@ export function MapViewer({
             <Home className="h-4 w-4" />
           </Button>
         </div>
-        {canReveal && hiddenCount > 0 && (
-          <Button
-            type="button"
-            variant={hiddenShown ? "secondary" : "outline"}
-            size="sm"
-            onClick={() => setHiddenShown((v) => !v)}
-          >
-            {hiddenShown ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
-            {hiddenCount} hidden
-          </Button>
+        {canReveal && (
+          <div className="flex items-center gap-1">
+            {hiddenCount > 0 && (
+              <Button
+                type="button"
+                variant={hiddenShown ? "secondary" : "outline"}
+                size="sm"
+                onClick={() => setHiddenShown((v) => !v)}
+                title={
+                  hiddenShown
+                    ? "Showing hidden locations — click to preview the players' view"
+                    : "Previewing the players' view — click to show hidden locations"
+                }
+              >
+                {hiddenShown ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+                {hiddenCount} hidden
+              </Button>
+            )}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={bulkPending || hiddenCount === 0}
+              onClick={() => void revealAll(true)}
+            >
+              {bulkPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Eye className="h-4 w-4" />
+              )}
+              Reveal all
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={bulkPending || hiddenCount === pins.length}
+              onClick={() => void revealAll(false)}
+            >
+              <EyeOff className="h-4 w-4" />
+              Hide all
+            </Button>
+          </div>
         )}
       </div>
+
+      {bulkError && (
+        <p role="alert" className="text-sm text-destructive">
+          {bulkError}
+        </p>
+      )}
 
       <div
         ref={frameRef}

@@ -356,4 +356,12 @@ point a city's pin at the province's article.
 
 **Fog of war** is per pin: `map_pins.is_revealed` gates player visibility in the
 RLS select policy, while campaign editors always see everything so they can
-reveal it. The viewer toggles optimistically and rolls back if the action fails.
+reveal it. Pins toggle individually, and **Reveal all / Hide all** cover the two
+ways a campaign actually starts — everything hidden and revealed as the party
+travels, or a map the players already know. Both are optimistic and roll back if
+the action fails.
+
+Because the gate is in the policy rather than the UI, a player's page never
+receives an unrevealed pin at all. Verified with two real accounts: with pins
+hidden the GM sees three and the player's map reports "0 pins"; after the GM
+reveals, the player sees all three.
