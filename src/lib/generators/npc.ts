@@ -14,6 +14,14 @@ import {
   VOICE,
   type Ancestry,
 } from "./data";
+import {
+  generateStatBlock,
+  levelRangeForRole,
+  roleForOccupation,
+  statBlockToMarkdown,
+  type NpcRole,
+  type StatBlock,
+} from "./statblock";
 
 export interface NpcOptions {
   ancestry?: Ancestry | "any";
@@ -21,6 +29,8 @@ export interface NpcOptions {
   occupation?: string | "any";
   /** 1–20, or "any" to roll a level appropriate for a commoner-to-notable. */
   level?: number | "any";
+  /** Combat role shaping the stat block; "auto" infers it from occupation. */
+  role?: NpcRole;
   seed?: number | string;
 }
 
@@ -40,6 +50,8 @@ export interface GeneratedNpc {
   biography: string;
   hooks: string[];
   portraitPrompt: string;
+  /** A full, level-appropriate PF2E stat block. */
+  statBlock: StatBlock;
 }
 
 function pickMaybe<T extends string>(
@@ -56,16 +68,19 @@ export function generateNpc(options: NpcOptions = {}): GeneratedNpc {
   const ancestry = pickMaybe(rng, options.ancestry, ANCESTRIES);
   const alignment = pickMaybe(rng, options.alignment, ALIGNMENTS);
   const occupation = pickMaybe(rng, options.occupation, OCCUPATIONS);
+
+  // A PF2E creature's level *is* its stat level, so the level has to agree with
+  // what the NPC actually is: a village fisher is level -1/0, not a level-4
+  // creature with a warrior's AC and attack bonus. Roll within the band implied
+  // by the role, and honour an explicit level when one is given.
+  const role: Exclude<NpcRole, "auto"> =
+    !options.role || options.role === "auto"
+      ? roleForOccupation(occupation)
+      : options.role;
+  const [minLevel, maxLevel] = levelRangeForRole(role);
   const level =
     !options.level || options.level === "any"
-      ? rng.weighted([
-          { value: 0, weight: 5 }, // level 0 = ordinary townsfolk
-          { value: 1, weight: 4 },
-          { value: 2, weight: 3 },
-          { value: 3, weight: 2 },
-          { value: 4, weight: 1 },
-          { value: 5, weight: 1 },
-        ])
+      ? rng.int(minLevel, maxLevel)
       : options.level;
 
   const name = generateNames({
@@ -109,12 +124,20 @@ export function generateNpc(options: NpcOptions = {}): GeneratedNpc {
     `${feature}, ${alignment.toLowerCase()} demeanor, fantasy character art, ` +
     `dramatic lighting, painterly.`;
 
+  const statBlock = generateStatBlock({
+    level,
+    role,
+    occupation,
+    seed: rng.int(0, 2 ** 30),
+  });
+
   return {
     name,
     ancestry,
     alignment,
     level,
     occupation,
+    statBlock,
     personality,
     ideal,
     bond,
@@ -155,8 +178,11 @@ export function npcToMarkdown(npc: GeneratedNpc): string {
     "",
     "## Stat block",
     "",
-    `*Placeholder — build a ${levelLabel} ${npc.occupation} NPC using the PF2E ` +
-      `NPC Gallery or the building-creatures guidelines.*`,
+    statBlockToMarkdown(npc.statBlock, npc.name, [
+      npc.alignment,
+      npc.ancestry.toLowerCase(),
+      "humanoid",
+    ]),
     "",
     `> Portrait prompt: ${npc.portraitPrompt}`,
   ].join("\n");

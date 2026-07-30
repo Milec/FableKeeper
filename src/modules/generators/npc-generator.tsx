@@ -8,6 +8,8 @@ import {
   type GeneratedNpc,
 } from "@/lib/generators/npc";
 import { ALIGNMENTS, ANCESTRIES, OCCUPATIONS } from "@/lib/generators/data";
+import { NPC_ROLES, ROLE_LABELS, type NpcRole } from "@/lib/generators/statblock";
+import { StatBlockView } from "./stat-block-view";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
@@ -19,6 +21,7 @@ export function NpcGenerator() {
   const [ancestry, setAncestry] = React.useState("any");
   const [alignment, setAlignment] = React.useState("any");
   const [occupation, setOccupation] = React.useState("any");
+  const [role, setRole] = React.useState<NpcRole>("auto");
   const [npc, setNpc] = React.useState<GeneratedNpc | null>(null);
 
   const generate = React.useCallback(() => {
@@ -27,9 +30,10 @@ export function NpcGenerator() {
         ancestry: ancestry as never,
         alignment,
         occupation,
+        role,
       }),
     );
-  }, [ancestry, alignment, occupation]);
+  }, [ancestry, alignment, occupation, role]);
 
   React.useEffect(() => {
     generate();
@@ -38,7 +42,7 @@ export function NpcGenerator() {
 
   return (
     <div className="space-y-5">
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <div className="space-y-1.5">
           <Label htmlFor="ancestry">Ancestry</Label>
           <Select id="ancestry" value={ancestry} onChange={(e) => setAncestry(e.target.value)}>
@@ -63,6 +67,14 @@ export function NpcGenerator() {
             <option value="any">Any</option>
             {OCCUPATIONS.map((o) => (
               <option key={o} value={o}>{o}</option>
+            ))}
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="role">Combat role</Label>
+          <Select id="role" value={role} onChange={(e) => setRole(e.target.value as NpcRole)}>
+            {NPC_ROLES.map((r) => (
+              <option key={r} value={r}>{ROLE_LABELS[r]}</option>
             ))}
           </Select>
         </div>
@@ -111,6 +123,15 @@ export function NpcGenerator() {
                   <li key={i}>{h}</li>
                 ))}
               </ul>
+            </div>
+
+            <div>
+              <p className="mb-1.5 text-sm font-semibold">Stat block</p>
+              <StatBlockView
+                statBlock={npc.statBlock}
+                name={npc.name}
+                traits={[npc.alignment, npc.ancestry.toLowerCase(), "humanoid"]}
+              />
             </div>
 
             <div className="rounded-md border bg-muted/40 p-3">

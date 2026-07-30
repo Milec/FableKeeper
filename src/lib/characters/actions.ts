@@ -5,6 +5,11 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { parsePathbuilder, PathbuilderParseError } from "./pathbuilder";
+import {
+  readAbilities,
+  readDefenses,
+  readSheetData,
+} from "./form-data";
 import type { Json } from "@/types/database";
 
 export interface CharacterActionState {
@@ -15,8 +20,6 @@ export interface CharacterActionState {
 // Manual create / edit
 // ---------------------------------------------------------------------------
 
-const ABILITY_KEYS = ["str", "dex", "con", "int", "wis", "cha"] as const;
-
 const characterSchema = z.object({
   campaignId: z.string().uuid(),
   name: z.string().min(1, "Name is required.").max(120),
@@ -25,28 +28,10 @@ const characterSchema = z.object({
   background: z.string().max(120).optional(),
   characterClass: z.string().max(120).optional(),
   level: z.coerce.number().int().min(1).max(20),
+  keyAbility: z.string().max(3).optional(),
+  deity: z.string().max(120).optional(),
   portraitUrl: z.string().url().optional().or(z.literal("")),
 });
-
-function readAbilities(formData: FormData) {
-  const abilities: Record<string, number> = {};
-  for (const key of ABILITY_KEYS) {
-    const raw = formData.get(`ability_${key}`);
-    const n = typeof raw === "string" ? Number.parseInt(raw, 10) : NaN;
-    if (Number.isFinite(n)) abilities[key] = n;
-  }
-  return abilities;
-}
-
-function readDefenses(formData: FormData) {
-  const defenses: Record<string, number> = {};
-  for (const key of ["ac", "hp_max", "hp_current", "speed"] as const) {
-    const raw = formData.get(`def_${key}`);
-    const n = typeof raw === "string" ? Number.parseInt(raw, 10) : NaN;
-    if (Number.isFinite(n)) defenses[key] = n;
-  }
-  return defenses;
-}
 
 export async function createCharacter(
   _prev: CharacterActionState,
@@ -60,11 +45,15 @@ export async function createCharacter(
     background: formData.get("background") || undefined,
     characterClass: formData.get("characterClass") || undefined,
     level: formData.get("level") ?? 1,
+    keyAbility: formData.get("keyAbility") || undefined,
+    deity: formData.get("deity") || undefined,
     portraitUrl: formData.get("portraitUrl") || "",
   });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
   }
+
+  const keyAbility = parsed.data.keyAbility?.toLowerCase() ?? null;
 
   const supabase = await createClient();
   const {
@@ -72,7 +61,6 @@ export async function createCharacter(
   } = await supabase.auth.getUser();
   if (!user) return { error: "You must be signed in." };
 
-  const notes = formData.get("notes");
   const { data, error } = await supabase
     .from("characters")
     .insert({
@@ -84,10 +72,14 @@ export async function createCharacter(
       background: parsed.data.background ?? null,
       class: parsed.data.characterClass ?? null,
       level: parsed.data.level,
+      key_ability: keyAbility,
       portrait_url: parsed.data.portraitUrl || null,
       abilities: readAbilities(formData),
       defenses: readDefenses(formData),
-      data: { notes: typeof notes === "string" ? notes : "" },
+      data: readSheetData(formData, {
+        deity: parsed.data.deity,
+        keyAbility,
+      }) as unknown as Json,
     })
     .select("id")
     .single();
@@ -113,14 +105,19 @@ export async function updateCharacter(
     background: formData.get("background") || undefined,
     characterClass: formData.get("characterClass") || undefined,
     level: formData.get("level") ?? 1,
+    keyAbility: formData.get("keyAbility") || undefined,
+    deity: formData.get("deity") || undefined,
     portraitUrl: formData.get("portraitUrl") || "",
   });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
   }
 
+  const keyAbility = parsed.data.keyAbility?.toLowerCase() ?? null;
+
   const supabase = await createClient();
-  // Preserve existing `data`, updating only the notes field.
+  // Preserve everything else in `data` (imported spells, alignment, ancestry
+  // feats) and overwrite only the fields this form owns.
   const { data: existing } = await supabase
     .from("characters")
     .select("data")
@@ -130,7 +127,6 @@ export async function updateCharacter(
     existing?.data && typeof existing.data === "object"
       ? (existing.data as Record<string, unknown>)
       : {};
-  const notes = formData.get("notes");
 
   const { error } = await supabase
     .from("characters")
@@ -141,10 +137,23 @@ export async function updateCharacter(
       background: parsed.data.background ?? null,
       class: parsed.data.characterClass ?? null,
       level: parsed.data.level,
+      key_ability: keyAbility,
       portrait_url: parsed.data.portraitUrl || null,
       abilities: readAbilities(formData),
       defenses: readDefenses(formData),
-      data: { ...prevData, notes: typeof notes === "string" ? notes : "" },
+      data: {
+        ...prevData,
+        ...readSheetData(formData, {
+          deity: parsed.data.deity,
+          keyAbility,
+          prevProficiencies:
+            prevData.proficiencies && typeof prevData.proficiencies === "object"
+              ? (prevData.proficiencies as Record<string, unknown>)
+              : undefined,
+          prevFeats: prevData.feats,
+          prevEquipment: prevData.equipment,
+        }),
+      } as unknown as Json,
     })
     .eq("id", characterId);
 

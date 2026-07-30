@@ -135,6 +135,8 @@ const CREATURE_TYPES = new Set([
 
 async function buildBestiary() {
   const creatures = [];
+  /** Full upstream records, kept only in-process to derive level benchmarks. */
+  const raw = [];
   const seen = new Set();
 
   for (const file of BESTIARY_FILES) {
@@ -166,6 +168,7 @@ async function buildBestiary() {
       if (seen.has(key)) continue;
       seen.add(key);
 
+      raw.push(c);
       creatures.push({
         name: c.name,
         level: c.level,
@@ -180,7 +183,126 @@ async function buildBestiary() {
   }
 
   creatures.sort((a, b) => a.level - b.level || a.name.localeCompare(b.name));
-  return creatures;
+  return { creatures, raw };
+}
+
+// --- Level benchmarks ------------------------------------------------------
+/**
+ * Statistical benchmarks per creature level, derived from the published
+ * bestiary.
+ *
+ * The GM Core / Gamemastery Guide "Building Creatures" chapter publishes design
+ * tables (AC by level, HP by level, …) for exactly this purpose, but rather than
+ * reproduce those tables we measure the creatures Paizo actually printed and
+ * take percentiles. That keeps us to observed facts, and lands closer to how
+ * real stat blocks are distributed than the design targets do.
+ *
+ * `low` / `moderate` / `high` are the 25th / 50th / 75th percentiles.
+ */
+function percentile(sorted, p) {
+  if (sorted.length === 0) return null;
+  const idx = (sorted.length - 1) * p;
+  const lo = Math.floor(idx);
+  const hi = Math.ceil(idx);
+  if (lo === hi) return sorted[lo];
+  return sorted[lo] + (sorted[hi] - sorted[lo]) * (idx - lo);
+}
+
+function tiers(values) {
+  const sorted = values.filter((v) => Number.isFinite(v)).sort((a, b) => a - b);
+  if (sorted.length === 0) return null;
+  const r = (n) => (n === null ? null : Math.round(n));
+  return {
+    low: r(percentile(sorted, 0.25)),
+    moderate: r(percentile(sorted, 0.5)),
+    high: r(percentile(sorted, 0.75)),
+    min: sorted[0],
+    max: sorted[sorted.length - 1],
+  };
+}
+
+/** Average of a dice expression like "2d6+3". */
+function diceAverage(expr) {
+  const m = /^(\d+)d(\d+)\s*([+-]\s*\d+)?/.exec(String(expr).trim());
+  if (!m) return null;
+  const n = Number(m[1]);
+  const faces = Number(m[2]);
+  const flat = m[3] ? Number(m[3].replace(/\s+/g, "")) : 0;
+  return (n * (faces + 1)) / 2 + flat;
+}
+
+/** Pull the leading dice expression out of a damage string. */
+function firstDamageExpr(damage) {
+  const cleaned = stripMarkup(String(damage ?? ""));
+  const m = /(\d+d\d+(?:\s*[+-]\s*\d+)?)/.exec(cleaned);
+  return m ? m[1].replace(/\s+/g, "") : null;
+}
+
+function buildBenchmarks(rawCreatures) {
+  const byLevel = new Map();
+
+  for (const c of rawCreatures) {
+    if (typeof c.level !== "number") continue;
+    let bucket = byLevel.get(c.level);
+    if (!bucket) {
+      bucket = { ac: [], hp: [], perception: [], fort: [], ref: [], will: [], attack: [], damage: [], bestAbility: [] };
+      byLevel.set(c.level, bucket);
+    }
+
+    const ac = c.defenses?.ac?.std;
+    if (Number.isFinite(ac)) bucket.ac.push(ac);
+
+    const hpEntries = Array.isArray(c.defenses?.hp) ? c.defenses.hp : [];
+    const hp = hpEntries.map((h) => h?.hp).find((h) => Number.isFinite(h));
+    if (Number.isFinite(hp)) bucket.hp.push(hp);
+
+    const per = c.perception?.std;
+    if (Number.isFinite(per)) bucket.perception.push(per);
+
+    for (const save of ["fort", "ref", "will"]) {
+      const v = c.defenses?.savingThrows?.[save]?.std;
+      if (Number.isFinite(v)) bucket[save].push(v);
+    }
+
+    const attacks = Array.isArray(c.attacks) ? c.attacks : [];
+    const best = attacks
+      .map((a) => a?.attack)
+      .filter((a) => Number.isFinite(a))
+      .sort((a, b) => b - a)[0];
+    if (Number.isFinite(best)) bucket.attack.push(best);
+
+    for (const a of attacks) {
+      const expr = firstDamageExpr(a?.damage);
+      const avg = expr ? diceAverage(expr) : null;
+      if (avg !== null) {
+        bucket.damage.push(avg);
+        break; // primary strike only
+      }
+    }
+
+    const mods = c.abilityMods ?? {};
+    const bestMod = Object.values(mods)
+      .filter((v) => Number.isFinite(v))
+      .sort((a, b) => b - a)[0];
+    if (Number.isFinite(bestMod)) bucket.bestAbility.push(bestMod);
+  }
+
+  const levels = {};
+  for (const [level, b] of [...byLevel.entries()].sort((a, b) => a[0] - b[0])) {
+    levels[level] = {
+      sampleSize: b.ac.length,
+      ac: tiers(b.ac),
+      hp: tiers(b.hp),
+      perception: tiers(b.perception),
+      fort: tiers(b.fort),
+      ref: tiers(b.ref),
+      will: tiers(b.will),
+      attack: tiers(b.attack),
+      damageAvg: tiers(b.damage),
+      bestAbility: tiers(b.bestAbility),
+    };
+  }
+  return levels;
 }
 
 // --- Rollable tables -------------------------------------------------------
@@ -301,8 +423,12 @@ async function main() {
   await fs.mkdir(OUT_DIR, { recursive: true });
 
   console.log("Fetching bestiary…");
-  const creatures = await buildBestiary();
+  const { creatures, raw } = await buildBestiary();
   console.log(`  ${creatures.length} creatures`);
+
+  console.log("Deriving level benchmarks…");
+  const benchmarks = buildBenchmarks(raw);
+  console.log(`  ${Object.keys(benchmarks).length} levels`);
 
   console.log("Fetching tables…");
   const rawTables = await getJson(`${RAW}/tables.json`);
@@ -325,6 +451,23 @@ async function main() {
   await fs.writeFile(
     path.join(OUT_DIR, "tables.json"),
     JSON.stringify({ meta, tables }, null, 0) + "\n",
+  );
+  await fs.writeFile(
+    path.join(OUT_DIR, "benchmarks.json"),
+    JSON.stringify(
+      {
+        meta: {
+          ...meta,
+          note:
+            "Per-level percentiles (25th/50th/75th = low/moderate/high) measured " +
+            "from the published creatures ingested above. Used to generate " +
+            "level-appropriate NPC stat blocks.",
+        },
+        levels: benchmarks,
+      },
+      null,
+      0,
+    ) + "\n",
   );
 
   console.log(`\nWrote ${OUT_DIR}/bestiary.json and tables.json`);

@@ -35,15 +35,17 @@ FableKeeper is being built iteratively. **Phases 1–5 are implemented** in this
 - ✅ **Global search** — a full search page plus a ⌘K command palette, both RLS-scoped so players never see secrets
 
 **Phase 3 — Character & Campaign Managers**
-- ✅ PF2E **character sheets** — identity, ability scores with modifiers, defenses, feats, and a markdown notes/journal, with multiple characters per user
-- ✅ **Pathbuilder import** (paste JSON export) and **character export** (download JSON)
+- ✅ Complete PF2E **character sheets** — identity, deity, ability scores, AC/HP, **all three saves**, Perception, **Class DC**, all **16 skills plus Lores** with computed modifiers and proficiency ranks, **spellcasting** by rank, feats, **inventory and coin purse**, languages, speed, active **conditions**, **XP progression**, **hero points**, and a markdown journal
+- ✅ **Proficiency rank editor** — set Perception, saves, Class DC, all 16 skills, and any number of Lores directly, with the resulting modifier previewed live as you change ranks, levels, or ability scores
+- ✅ **Row editors for feats and inventory**, so a hand-built character is as complete as an imported one
+- ✅ **Pathbuilder import** (paste JSON export) and **character export** (download JSON) — imported proficiencies, lores, spells, and equipment all surface on the sheet, and a manual edit never overwrites them
 - ✅ **Image storage** — portraits and other campaign media uploaded to Supabase Storage, with uploads restricted to campaign members by RLS
 - ✅ **Session tracker** with dated recap notes and GM-only planning sessions
 - ✅ **Quest tracker** grouped by status (active / on hold / completed / failed), with GM-secret quests
 - ✅ Per-campaign section navigation (Overview · Characters · Sessions · Quests)
 
 **Phase 4 — Generators**
-- ✅ **NPC Generator** — personality, ideals/bonds/flaws, appearance, voice, biography, plot hooks, and a portrait prompt
+- ✅ **NPC Generator** — personality, ideals/bonds/flaws, appearance, voice, biography, plot hooks, a portrait prompt, and a **full PF2E stat block** (AC, HP, saves, Perception, skills, strikes with damage, spell DC) sized to the NPC's level and combat role
 - ✅ **Name Generator** — people (by ancestry), settlements, taverns, and ships, with saved favorites
 - ✅ **Shop Generator** — a keeper, description, and priced inventory that scales to settlement size and level
 - ✅ **Backstory Generator** — summary, full history, future goals, and adventure hooks

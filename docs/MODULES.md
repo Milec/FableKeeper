@@ -179,9 +179,65 @@ Four generators live under `src/lib/generators/` (pure, unit-tested) with UIs in
   `…ToMarkdown` helper so a result can be copied straight into a World Builder
   entry.
 
+- `statblock.ts` — generates a full PF2E stat block for an NPC: AC, HP, saves,
+  Perception, skills, strikes with damage dice, and a spell DC for casters.
+  Numbers come from `benchmarks.json` (see [PF2E-DATA.md](./PF2E-DATA.md)), with
+  a **combat role** deciding which percentile each statistic draws from — so a
+  level-5 brute is tough but easy to hit, while a level-5 soldier is the reverse.
+  Roles also bound the level a role plausibly occupies: PF2E creature level *is*
+  the stat level, so a village fisher is generated at level −1/0 rather than
+  being statted as a level-4 creature with a warrior's AC and attack bonus.
+
 The generators run entirely client-side with no external services. The Name
-Generator stores favourites in `localStorage`. AI-assisted generation (Phase 6)
-can layer on top of the same pure functions later without changing the UIs.
+Generator stores favourites in `localStorage`.
+
+### Character sheet
+
+`src/lib/characters/sheet.ts` derives everything a sheet displays from the stored
+character, following PF2E's maths (`level + proficiency rank + ability modifier`,
+with untrained skills getting no level bonus): all three saves, Perception, Class
+DC, the 16 skills plus Lores, spellcasting by rank, feats, inventory, coins,
+languages, and conditions, plus XP progression toward the next level and hero
+points. Pathbuilder imports already carried this data in the `data` jsonb; the
+sheet surfaces it. Covered by unit tests that assert the derived numbers for a
+known level-5 character. AI-assisted generation (Phase 6) can layer on top of the
+same pure functions later without changing the UIs.
+
+**Proficiency rank editor** — `src/modules/characters/proficiency-editor.tsx`
+lets a hand-built character set every rank directly (Perception, the three saves,
+Class DC, all 16 skills, and any number of Lores), previewing the resulting
+modifier live so the PF2E maths stays visible while editing. Without it, ranks
+could only arrive via a Pathbuilder import, so a manually created character
+always showed untrained modifiers.
+
+Two implementation details are worth knowing before editing these forms:
+
+- The editors serialise their state into **hidden JSON inputs** (`proficiencies`,
+  `lores`, `feats`, `equipment`) rather than indexed field names, so adding and
+  removing rows never leaves stale keys in the submitted `FormData`. Lores and
+  equipment emit Pathbuilder's `[name, rank]` / `[name, quantity]` tuple shape,
+  so imported and hand-edited data stay interchangeable. `actions.ts` re-validates
+  everything server-side, clamping ranks to PF2E's `0/2/4/6/8`.
+- Every `TabsContent` in the character form uses **`forceMount`**. Radix unmounts
+  inactive tab panels by default, which would silently drop those fields from the
+  submitted form; the panels are hidden with
+  `data-[state=inactive]:hidden` instead.
+
+`src/lib/characters/form-data.ts` holds the pure `FormData` → `data` jsonb
+parsers, kept out of `actions.ts` so they are unit-testable without a Supabase
+client. The **merge rules are the subtle part**, because the editors expose less
+than a Pathbuilder import stores and a naive write-back destroys the difference:
+
+- `updateCharacter` spreads the form-owned fields over the existing `data`, so
+  keys with no UI at all (spells, alignment) survive an edit.
+- `proficiencies` is **merged, not replaced**: Pathbuilder keeps armour, weapon,
+  and spellcasting proficiencies in the same map the rank editor writes to.
+- `feats` and `equipment` are **matched by name against the stored entries**, so
+  an unchanged row is written back as its original tuple. A Pathbuilder feat is
+  `[name, source, type, level]`; the editor only shows the name, so flattening
+  would throw the rest away.
+
+Tests in `form-data.test.ts` pin each of these rules.
 
 ## Encounters & Rollable Tables (Phase 5)
 
