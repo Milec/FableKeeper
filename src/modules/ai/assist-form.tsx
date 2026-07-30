@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { EntryContent } from "@/components/world/entry-content";
 import { generateEntryDraft, type AssistState } from "@/lib/ai/actions";
+import { AI_STUDIO_URL } from "@/lib/ai/errors";
 import { ENTRY_CATEGORIES, ENTRY_TYPES } from "@/lib/world/entry-types";
 import type { WorldEntryType } from "@/types/database";
 
@@ -65,9 +66,18 @@ export function AssistForm({
             AI Assist isn&apos;t configured yet
           </p>
           <p className="text-muted-foreground">
-            Add an <code className="font-mono text-xs">ANTHROPIC_API_KEY</code>{" "}
-            secret to the Cloudflare Worker and redeploy. Nothing else in
-            FableKeeper depends on it — the rest of the app works without one.
+            Add a <code className="font-mono text-xs">GEMINI_API_KEY</code>{" "}
+            secret to the Cloudflare Worker and redeploy. Keys are free from{" "}
+            <a
+              href={AI_STUDIO_URL}
+              target="_blank"
+              rel="noreferrer"
+              className="font-medium text-primary underline underline-offset-4"
+            >
+              Google AI Studio
+            </a>{" "}
+            — no card required. Nothing else in FableKeeper depends on it; the
+            rest of the app works without one.
           </p>
         </CardContent>
       </Card>

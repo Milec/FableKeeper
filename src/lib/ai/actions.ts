@@ -1,6 +1,6 @@
 "use server";
 
-import Anthropic from "@anthropic-ai/sdk";
+import { GoogleGenAI } from "@google/genai";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { ALL_ENTRY_TYPES } from "@/lib/world/entry-types";
@@ -14,6 +14,7 @@ import {
   type ContextEntry,
   type EntryDraft,
 } from "./prompt";
+import { isUsableFinish, messageForBlock, messageForStatus } from "./errors";
 import type { WorldEntryType } from "@/types/database";
 
 export interface AssistState {
@@ -31,8 +32,23 @@ const schema = z.object({
     .max(MAX_BRIEF_CHARS),
 });
 
-/** The model to generate with. Opus for prose quality — this is the deliverable. */
-const MODEL = "claude-opus-5";
+/**
+ * The model to generate with.
+ *
+ * Gemini 2.5 Flash is the pick because it is the strongest model with a real
+ * free tier: good enough prose for setting-book copy, native structured
+ * outputs, and no card on file. Deliberately a *stable* id rather than a
+ * `-preview` one — preview models are withdrawn on Google's schedule, and a
+ * campaign wiki shouldn't lose a feature because an alias retired.
+ */
+const MODEL = "gemini-2.5-flash";
+
+/**
+ * Free-tier quota is small and shared across the whole deployment, so an
+ * unbounded response costs more here than it would on a paid key. Cap the
+ * output rather than letting a rambling brief pull a novel.
+ */
+const MAX_OUTPUT_TOKENS = 8192;
 
 export async function generateEntryDraft(
   _prev: AssistState,
@@ -49,11 +65,11 @@ export async function generateEntryDraft(
   }
   const entryType = parsed.data.entryType as WorldEntryType;
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
     return {
       error:
-        "AI Assist isn't configured. Add an ANTHROPIC_API_KEY secret to the Worker and redeploy.",
+        "AI Assist isn't configured. Add a GEMINI_API_KEY secret to the Worker and redeploy.",
     };
   }
 
@@ -84,55 +100,48 @@ export async function generateEntryDraft(
     .limit(MAX_CONTEXT_ENTRIES);
   const entries: ContextEntry[] = rows ?? [];
 
-  const client = new Anthropic({ apiKey });
+  const ai = new GoogleGenAI({ apiKey });
 
   try {
-    const response = await client.messages.create({
+    const response = await ai.models.generateContent({
       model: MODEL,
-      max_tokens: 16000,
-      system: [
-        {
-          type: "text",
-          text: SYSTEM_PROMPT,
-          // The system prompt is fixed, so it caches across every request.
-          cache_control: { type: "ephemeral" },
-        },
-      ],
-      thinking: { type: "adaptive" },
-      output_config: {
-        effort: "medium",
-        format: { type: "json_schema", schema: DRAFT_SCHEMA },
+      contents: buildUserPrompt({
+        worldName: world.name,
+        entryType,
+        brief: parsed.data.brief,
+        entries,
+      }),
+      config: {
+        systemInstruction: SYSTEM_PROMPT,
+        maxOutputTokens: MAX_OUTPUT_TOKENS,
+        // Prose, not extraction — the default temperature gives the variety
+        // that makes two NPCs from similar briefs read as different people.
+        temperature: 1,
+        responseMimeType: "application/json",
+        responseJsonSchema: DRAFT_SCHEMA,
       },
-      messages: [
-        {
-          role: "user",
-          content: buildUserPrompt({
-            worldName: world.name,
-            entryType,
-            brief: parsed.data.brief,
-            entries,
-          }),
-        },
-      ],
     });
 
-    // Check the stop reason before touching content: a refused response carries
-    // no usable body, and indexing into it would throw rather than explain.
-    if (response.stop_reason === "refusal") {
-      return {
-        error:
-          "The assistant declined to write that. Try rewording the brief, or write this entry by hand.",
-      };
+    // Check both places a generation can stop before touching the text. A
+    // blocked prompt never produced any, and a non-STOP finish means what is
+    // there is truncated — reading either would surface as a parse error that
+    // tells the GM nothing about what actually happened.
+    const blockReason = response.promptFeedback?.blockReason;
+    if (blockReason) {
+      return { error: messageForBlock(blockReason, "prompt") };
     }
 
-    const text = response.content.find((b) => b.type === "text");
-    if (!text || text.type !== "text") {
-      return { error: "The assistant returned nothing. Try again." };
+    const finishReason = response.candidates?.[0]?.finishReason;
+    if (!isUsableFinish(finishReason)) {
+      return { error: messageForBlock(finishReason, "response") };
     }
+
+    const text = response.text;
+    if (!text) return { error: "The assistant returned nothing. Try again." };
 
     let payload: unknown;
     try {
-      payload = JSON.parse(text.text);
+      payload = JSON.parse(text);
     } catch {
       return { error: "The assistant's reply couldn't be read. Try again." };
     }
@@ -142,25 +151,20 @@ export async function generateEntryDraft(
 
     return { draft, entryType };
   } catch (err) {
-    // Typed SDK errors, most specific first — a bad key and a rate limit need
-    // very different things from the person reading the message.
-    if (err instanceof Anthropic.AuthenticationError) {
-      return { error: "The configured ANTHROPIC_API_KEY was rejected." };
-    }
-    if (err instanceof Anthropic.RateLimitError) {
-      return { error: "Rate limited by the API. Wait a moment and try again." };
-    }
-    if (err instanceof Anthropic.APIConnectionError) {
-      return { error: "Couldn't reach the API. Check the Worker's network access." };
-    }
-    if (err instanceof Anthropic.APIError) {
-      return { error: `The API returned an error (${err.status}).` };
-    }
-    return { error: "Something went wrong generating that draft." };
+    // The SDK throws ApiError with the HTTP status attached and the raw error
+    // body as the message; an error carrying neither never reached the API.
+    const api = err as { status?: unknown; message?: unknown };
+    const status = typeof api?.status === "number" ? api.status : Number(api?.status);
+    const detail = typeof api?.message === "string" ? api.message : undefined;
+    return {
+      error: Number.isFinite(status)
+        ? messageForStatus(status, detail)
+        : "Couldn't reach the Gemini API. Check the Worker's network access.",
+    };
   }
 }
 
 /** Whether the deployment has a key configured, for the UI's empty state. */
 export async function isAiConfigured(): Promise<boolean> {
-  return Boolean(process.env.ANTHROPIC_API_KEY);
+  return Boolean(process.env.GEMINI_API_KEY);
 }

@@ -409,5 +409,43 @@ entry editor's template-seeding effect skips when a draft is prefilled, so the
 type's guided template can't clobber the generated body.
 
 The module is optional. `isAiConfigured()` gates the form on the presence of
-`ANTHROPIC_API_KEY`; without one the page explains what to add and nothing else
-in FableKeeper is affected.
+`GEMINI_API_KEY`; without one the page explains what to add and nothing else in
+FableKeeper is affected.
+
+### Why Gemini, and what the provider seam looks like
+
+The module runs on **Gemini 2.5 Flash** through `@google/genai`, chosen because
+it is the strongest model with a genuine free tier — good enough prose for
+setting-book copy, native structured outputs, and no card on file. `MODEL` is
+deliberately a *stable* id rather than a `-preview` alias: preview models are
+withdrawn on Google's schedule, and a campaign wiki shouldn't lose a feature
+because an alias retired.
+
+Swapping providers touches exactly two files, which is the point of the split:
+
+- `prompt.ts` is provider-agnostic. `DRAFT_SCHEMA` is plain JSON Schema, which
+  Gemini takes directly as `responseJsonSchema`; it needed no changes when the
+  module moved off its first provider.
+- `errors.ts` holds the failure-message mapping, pure and unit-tested, because
+  these strings are the only thing a GM sees when generation fails. The mapping
+  distinguishes *who has to act*: a rejected key needs someone with access to
+  the secret, a 429 just needs a minute, and a 400 is our bug — telling someone
+  to "check your key" on a quota error sends them hunting for a fault that
+  isn't there.
+
+Only `actions.ts` knows which vendor is in use.
+
+**Free tiers make quota a routine path, not an edge case.** Google no longer
+publishes per-model free-tier limits in its docs (they're shown per-account in
+AI Studio) and has cut them before, so 429 is treated as an ordinary outcome
+with a message that says it resolves on its own, and `MAX_OUTPUT_TOKENS` caps
+each response so one rambling brief can't spend the day's allowance.
+
+Gemini can stop a generation in two different places, and both are checked
+*before* reading the text: `promptFeedback.blockReason` (the brief itself was
+blocked, before anything was written) and the candidate's `finishReason` (the
+output was cut off partway). Either one leaves the JSON absent or truncated, so
+parsing first would surface a meaningless syntax error instead of an
+explanation. Note that `finishReason` is *absent* on some successful responses,
+so `isUsableFinish` treats missing as fine — rejecting it would throw away good
+drafts.

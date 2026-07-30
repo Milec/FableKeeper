@@ -76,7 +76,8 @@ FableKeeper is being built iteratively. **Phases 1–6 are implemented** in this
 - ✅ **Links that resolve** — the assistant references existing entries by their exact titles in `[[wiki links]]`, and is told never to invent a link to something that doesn't exist
 - ✅ **Nothing saves itself** — a draft opens *prefilled in the normal entry editor* for you to review and edit; it only lands in the world when you save it
 - ✅ **Fiction, not mechanics** — the assistant is instructed not to invent PF2E rules text or stat blocks; the generators and Encounter Builder handle numbers
-- ✅ **Fully optional** — without an `ANTHROPIC_API_KEY` the page explains what to add and the rest of FableKeeper is unaffected
+- ✅ **Free to run** — powered by Gemini 2.5 Flash on Google's free tier, so the feature costs nothing to use
+- ✅ **Fully optional** — without a `GEMINI_API_KEY` the page explains what to add and the rest of FableKeeper is unaffected
 
 See the [roadmap](#roadmap) for what comes next.
 
@@ -119,12 +120,13 @@ cp .env.example .env.local
 Fill in your Supabase URL and anon key. To enable Google/Discord login, configure
 those providers in your Supabase dashboard (Authentication → Providers).
 
-`ANTHROPIC_API_KEY` is optional and powers only the AI Assist module — without it
-that page explains what to add and everything else works normally. On Cloudflare
-it is a secret, not a `[vars]` entry:
+`GEMINI_API_KEY` is optional and powers only the AI Assist module — without it
+that page explains what to add and everything else works normally. Get one free
+from [Google AI Studio](https://aistudio.google.com/apikey) (no card required).
+On Cloudflare it is a secret, not a `[vars]` entry:
 
 ```bash
-wrangler secret put ANTHROPIC_API_KEY
+wrangler secret put GEMINI_API_KEY
 ```
 
 ### 3. Set up the database
