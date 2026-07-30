@@ -15,10 +15,16 @@ export default async function NewEntryPage({
   searchParams,
 }: {
   params: Promise<{ campaignId: string; worldId: string }>;
-  searchParams: Promise<{ type?: string; title?: string }>;
+  searchParams: Promise<{
+    type?: string;
+    title?: string;
+    summary?: string;
+    content?: string;
+    tags?: string;
+  }>;
 }) {
   const { campaignId, worldId } = await params;
-  const { type, title } = await searchParams;
+  const { type, title, summary, content, tags } = await searchParams;
 
   const campaign = await getCampaignContext(campaignId);
   if (!campaign) notFound();
@@ -42,6 +48,9 @@ export default async function NewEntryPage({
         resolver={resolver}
         defaultType={defaultType}
         defaultTitle={title}
+        defaultSummary={summary}
+        defaultMarkdown={content}
+        defaultTags={tags}
         linkTargets={refs.map((r) => ({ title: r.title, type: r.type }))}
         cancelHref={worldBase}
       />

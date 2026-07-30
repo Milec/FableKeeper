@@ -276,10 +276,12 @@ Both build on the tested dice engine and the seedable RNG:
 
 ## Planned modules
 
-The registry already lists the roadmap modules (World Builder, Characters,
-Campaign Manager, Encounter Builder, Generators, Shop Generator, Interactive
-Maps, AI Assist) as `planned`, so they appear in the UI as "coming soon" and can
-be activated as each is built.
+Every module in the registry is now `available`. The `planned` status remains
+part of `ModuleDefinition` because it is how a module is introduced: register it
+as `planned` so it appears in the UI as "coming soon", then flip it to
+`available` with its `campaignPath` once the route exists. Nothing else needs to
+change — the sidebar, the module grid, and the search index all read the
+registry.
 
 ## Interactive Maps (Phase 6)
 
@@ -365,3 +367,47 @@ Because the gate is in the policy rather than the UI, a player's page never
 receives an unrevealed pin at all. Verified with two real accounts: with pins
 hidden the GM sees three and the player's map reports "0 pins"; after the GM
 reveals, the player sees all three.
+
+## AI Assist (Phase 6)
+
+The reason to generate lore *inside* FableKeeper rather than in a general chat
+tool is that the world already exists here. So the module's real work is
+context assembly, and that lives in a pure module the API call merely consumes.
+
+- `src/lib/ai/prompt.ts` — everything deterministic: the system prompt, the
+  world digest, the response schema, and `normaliseDraft`. Kept free of any
+  network or Supabase dependency so the prompt is unit-tested without spending
+  anything. The digest is capped at `MAX_CONTEXT_ENTRIES` (60) and each summary
+  clipped to 160 characters — an Azgaar import alone produces 600+ entries, and
+  sending them all would drown the GM's brief in noise. When entries are
+  dropped the prompt says how many, so the model knows the list is partial
+  rather than exhaustive.
+- `src/lib/ai/actions.ts` — the Server Action. Reads the world digest through
+  the **user's** Supabase client, so RLS scopes the context to what that person
+  may read: a draft requested by a Player is grounded only in what the GM has
+  actually revealed. Uses structured outputs against `DRAFT_SCHEMA`, and checks
+  `stop_reason === "refusal"` *before* touching `response.content` — a refused
+  response carries no usable body, so indexing into it would throw rather than
+  explain. SDK errors are caught by type, most specific first, because a
+  rejected key and a rate limit need very different things from the reader.
+- `src/modules/ai/assist-form.tsx` — the UI.
+
+Two decisions worth keeping:
+
+**Links are the point.** The model is told to reference existing entries by
+wrapping their exact title in `[[double brackets]]`, and explicitly *never* to
+invent a bracketed link to something that doesn't exist — a paraphrased title
+produces a dead wiki link, which is worse than no link. In an empty world the
+prompt omits the invitation entirely rather than asking for links to nothing.
+
+**Nothing is saved automatically.** The draft is rendered for review, and
+"Open in the editor" is a plain `GET` form that hands `title`, `summary`,
+`content`, and `tags` to the normal new-entry page as query params. Generated
+text therefore goes through exactly the same editor, validation, and save path
+as hand-written text, and only lands in the world when the GM saves it. The
+entry editor's template-seeding effect skips when a draft is prefilled, so the
+type's guided template can't clobber the generated body.
+
+The module is optional. `isAiConfigured()` gates the form on the presence of
+`ANTHROPIC_API_KEY`; without one the page explains what to add and nothing else
+in FableKeeper is affected.
