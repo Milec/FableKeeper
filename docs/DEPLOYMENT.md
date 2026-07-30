@@ -32,7 +32,7 @@ must never be committed — set them with Wrangler:
 
 ```bash
 npx wrangler secret put SUPABASE_SERVICE_ROLE_KEY
-npx wrangler secret put ANTHROPIC_API_KEY   # later phases
+npx wrangler secret put GEMINI_API_KEY      # optional — AI Assist only
 ```
 
 The public Supabase values are needed at build time. Provide them via your CI/CD
