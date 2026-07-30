@@ -14,6 +14,12 @@ import {
   updateCharacter,
   type CharacterActionState,
 } from "@/lib/characters/actions";
+import {
+  characterData,
+  deriveCoins,
+  deriveConditions,
+  deriveLanguages,
+} from "@/lib/characters/sheet";
 import type {
   AbilityScores,
   Character,
@@ -27,6 +33,13 @@ const ABILITIES: { key: keyof AbilityScores; label: string }[] = [
   { key: "int", label: "INT" },
   { key: "wis", label: "WIS" },
   { key: "cha", label: "CHA" },
+];
+
+const COINS = [
+  { key: "pp" as const, label: "PP" },
+  { key: "gp" as const, label: "GP" },
+  { key: "sp" as const, label: "SP" },
+  { key: "cp" as const, label: "CP" },
 ];
 
 const DEFENSES: { key: keyof CharacterDefenses; label: string }[] = [
@@ -64,8 +77,11 @@ export function CharacterForm({
 
   const abilities = (character?.abilities as AbilityScores | null) ?? {};
   const defenses = (character?.defenses as CharacterDefenses | null) ?? {};
-  const notes =
-    (character?.data as { notes?: string } | null)?.notes ?? "";
+  const data = characterData(character ?? ({ data: {} } as never));
+  const notes = data.notes ?? "";
+  const coins = deriveCoins(data);
+  const languages = deriveLanguages(data);
+  const conditions = deriveConditions(data);
 
   return (
     <form action={formAction} className="space-y-6">
@@ -181,6 +197,48 @@ export function CharacterForm({
           ))}
         </div>
       </fieldset>
+
+      <fieldset className="space-y-2">
+        <legend className="text-sm font-medium">Wealth</legend>
+        <div className="grid grid-cols-4 gap-3">
+          {COINS.map(({ key, label }) => (
+            <div key={key} className="space-y-1">
+              <Label htmlFor={`coin_${key}`} className="text-xs">
+                {label}
+              </Label>
+              <Input
+                id={`coin_${key}`}
+                name={`coin_${key}`}
+                type="number"
+                min={0}
+                defaultValue={coins[key] || ""}
+                className="text-center"
+              />
+            </div>
+          ))}
+        </div>
+      </fieldset>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="space-y-2">
+          <Label htmlFor="languages">Languages</Label>
+          <Input
+            id="languages"
+            name="languages"
+            defaultValue={languages.join(", ")}
+            placeholder="Common, Elven"
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="conditions">Conditions</Label>
+          <Input
+            id="conditions"
+            name="conditions"
+            defaultValue={conditions.join(", ")}
+            placeholder="Frightened 1, Clumsy 1"
+          />
+        </div>
+      </div>
 
       <div className="space-y-2">
         <Label>Notes &amp; journal</Label>

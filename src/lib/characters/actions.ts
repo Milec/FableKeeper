@@ -38,6 +38,31 @@ function readAbilities(formData: FormData) {
   return abilities;
 }
 
+/** Coin purse from the wealth fields; zeroes are dropped. */
+function readCoins(formData: FormData) {
+  const coins: Record<string, number> = {};
+  for (const key of ["pp", "gp", "sp", "cp"] as const) {
+    const raw = formData.get(`coin_${key}`);
+    const n = typeof raw === "string" ? Number.parseInt(raw, 10) : NaN;
+    if (Number.isFinite(n) && n > 0) coins[key] = n;
+  }
+  return coins;
+}
+
+/** Split a comma-separated field into a trimmed, de-duplicated list. */
+function readList(formData: FormData, field: string): string[] {
+  const raw = formData.get(field);
+  if (typeof raw !== "string") return [];
+  return [
+    ...new Set(
+      raw
+        .split(",")
+        .map((v) => v.trim())
+        .filter(Boolean),
+    ),
+  ].slice(0, 40);
+}
+
 function readDefenses(formData: FormData) {
   const defenses: Record<string, number> = {};
   for (const key of ["ac", "hp_max", "hp_current", "speed"] as const) {
@@ -87,7 +112,12 @@ export async function createCharacter(
       portrait_url: parsed.data.portraitUrl || null,
       abilities: readAbilities(formData),
       defenses: readDefenses(formData),
-      data: { notes: typeof notes === "string" ? notes : "" },
+      data: {
+        notes: typeof notes === "string" ? notes : "",
+        coins: readCoins(formData),
+        languages: readList(formData, "languages"),
+        conditions: readList(formData, "conditions"),
+      },
     })
     .select("id")
     .single();
@@ -120,7 +150,8 @@ export async function updateCharacter(
   }
 
   const supabase = await createClient();
-  // Preserve existing `data`, updating only the notes field.
+  // Preserve everything else in `data` (imported feats, spells, proficiencies)
+  // and update only the fields this form owns.
   const { data: existing } = await supabase
     .from("characters")
     .select("data")
@@ -144,7 +175,13 @@ export async function updateCharacter(
       portrait_url: parsed.data.portraitUrl || null,
       abilities: readAbilities(formData),
       defenses: readDefenses(formData),
-      data: { ...prevData, notes: typeof notes === "string" ? notes : "" },
+      data: {
+        ...prevData,
+        notes: typeof notes === "string" ? notes : "",
+        coins: readCoins(formData),
+        languages: readList(formData, "languages"),
+        conditions: readList(formData, "conditions"),
+      },
     })
     .eq("id", characterId);
 
