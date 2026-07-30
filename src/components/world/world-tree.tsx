@@ -121,7 +121,10 @@ export function WorldTree({
       {canEdit && (
         <Link
           href={`${base}/entries/new`}
-          className="flex items-center justify-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+          // Outline rather than solid: the world index header already carries a
+          // primary "New entry", and two filled purple CTAs for the same action
+          // on one screen fight each other.
+          className="flex items-center justify-center gap-1.5 rounded-md border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-accent"
         >
           <Plus className="h-4 w-4" />
           New entry
