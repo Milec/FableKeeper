@@ -280,3 +280,80 @@ The registry already lists the roadmap modules (World Builder, Characters,
 Campaign Manager, Encounter Builder, Generators, Shop Generator, Interactive
 Maps, AI Assist) as `planned`, so they appear in the UI as "coming soon" and can
 be activated as each is built.
+
+## Interactive Maps (Phase 6)
+
+The module's first capability is **cross-compatibility with Azgaar's Fantasy Map
+Generator**: import a map's JSON export and it becomes a connected set of World
+Builder articles.
+
+- `src/lib/maps/azgaar.ts` — parses FMG's Full and Minimal export shapes (both
+  nest entities under `pack`) and normalises its terse fields. Also exports
+  `compactAzgaarExport`, which the client runs **before uploading**.
+- `src/lib/maps/entries.ts` — maps each entity onto the entry type that matches
+  what it is (Monarchy → Kingdom, `ruins` marker → Ruin, `caves` → Dungeon) and
+  writes `[[wiki links]]` between them.
+- `src/lib/maps/actions.ts` — the Server Action. Bulk-inserts in chunks and
+  resolves the whole backlink graph in memory from one lookup, rather than the
+  per-entry query the normal save path uses; a 600-entry import would otherwise
+  be 600 round trips.
+- `src/modules/maps/azgaar-import.tsx` — the import UI. Because the parser is
+  pure, **the same code previews the file in the browser** before anything is
+  uploaded: entity counts per group, per-type totals, and a population filter,
+  all live.
+
+### Things the format demands you get right
+
+These were established against Azgaar's own `tests/fixtures/demo.map` (v1.112),
+not inferred, and each one silently corrupts an import if missed:
+
+- **Index 0 is a placeholder in only some collections.** `states[0]` is
+  "Neutrals", `cultures[0]` "Wildlands", `religions[0]` "No religion" — all
+  meaning unclaimed. `burgs[0]`, `provinces[0]`, and `features[0]` are the
+  literal number `0`. But `markers[0]` and `zones[0]` are **real entities**, so a
+  blanket skip-id-0 rule drops the first marker and zone.
+- **`removed: true` entries stay in the array** — FMG tombstones to keep ids
+  stable.
+- **A burg records neither its province nor its religion.** Those live only in
+  the per-cell arrays, so they are recovered from `pack.cells`. This is why
+  compaction *reduces* the cell array to the burg-occupied cells rather than
+  dropping it: a real 1.7 MB export compacts to 0.38 MB with all 753 burgs still
+  fully linked.
+- **A marker's name is in the map notes** (`marker3` → "Mount Tother"), not on
+  the marker. FMG's generated legends are real flavour text and lead the article.
+- **Populations are scaled**: `population * populationRate * urbanization`.
+
+Settlements split three ways: **city** at 5,000+, **town** at 1,000+, **village**
+below that, with capitals always cities. The bands matter — the median burg on a
+generated map sits near 3,700, so with only city and village either two thirds of
+a map becomes "cities" or every market town is filed as a village. Migration
+`0009` adds the `town` entry type for this.
+
+Re-importing the same map is safe: entries whose slug already exists are left
+untouched rather than overwritten, since the GM has probably edited them.
+
+### The map viewer
+
+`maps` holds an image plus `map_pins`. Pins store **normalised coordinates**
+(0–1 of the image on each axis) rather than pixels, because Azgaar records
+positions in the pixel space of the map *it* generated (`info.width` ×
+`info.height`) while the GM exports the picture at whatever resolution they like,
+and may swap in a tidied version later. Fractions survive all of that.
+
+Two consequences worth keeping in mind when touching `map-viewer.tsx`:
+
+- **The frame's aspect ratio is measured from the image on load**, not
+  hard-coded. Pins are positioned as percentages of the frame, so if the frame's
+  ratio doesn't match the image, `object-contain` letterboxes the image inside it
+  and every pin drifts.
+- **Pins counter-scale with zoom** (`scale(1/zoom)`) so they stay a constant
+  on-screen size instead of ballooning as the map is magnified.
+
+`buildPinDrafts` resolves a pin to its article through the entry drafts rather
+than by re-slugifying the name. The draft builder de-duplicates slug collisions,
+and Azgaar names a province after its seat burg — re-deriving the slug would
+point a city's pin at the province's article.
+
+**Fog of war** is per pin: `map_pins.is_revealed` gates player visibility in the
+RLS select policy, while campaign editors always see everything so they can
+reveal it. The viewer toggles optimistically and rolls back if the action fails.

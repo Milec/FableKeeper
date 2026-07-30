@@ -11,6 +11,13 @@ const nextConfig = {
   experimental: {
     // Keep server bundles lean for the Cloudflare Workers runtime.
     optimizePackageImports: ["lucide-react"],
+    serverActions: {
+      // Azgaar map imports are by far the largest payload the app accepts. The
+      // client compacts an export before uploading — dropping the cell grid,
+      // vertices, and coats of arms, around 80% of the file — but a very large
+      // world still clears the 1 MB default.
+      bodySizeLimit: "8mb",
+    },
   },
 };
 

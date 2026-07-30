@@ -22,6 +22,7 @@ export type WorldEntryType =
   | "kingdom"
   | "province"
   | "city"
+  | "town"
   | "village"
   | "landmark"
   | "dungeon"
@@ -184,6 +185,75 @@ export interface Database {
           updated_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["worlds"]["Insert"]>;
+        Relationships: [];
+      };
+      maps: {
+        Row: {
+          id: string;
+          campaign_id: string;
+          world_id: string | null;
+          name: string;
+          description: string | null;
+          image_url: string | null;
+          source: Json;
+          created_by: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          campaign_id: string;
+          world_id?: string | null;
+          name: string;
+          description?: string | null;
+          image_url?: string | null;
+          source?: Json;
+          created_by: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          name?: string;
+          description?: string | null;
+          image_url?: string | null;
+          world_id?: string | null;
+          source?: Json;
+        };
+        Relationships: [];
+      };
+      map_pins: {
+        Row: {
+          id: string;
+          map_id: string;
+          campaign_id: string;
+          entry_id: string | null;
+          label: string;
+          kind: string;
+          x: number;
+          y: number;
+          is_revealed: boolean;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          map_id: string;
+          campaign_id: string;
+          entry_id?: string | null;
+          label: string;
+          kind?: string;
+          x: number;
+          y: number;
+          is_revealed?: boolean;
+          created_at?: string;
+        };
+        Update: {
+          label?: string;
+          kind?: string;
+          x?: number;
+          y?: number;
+          is_revealed?: boolean;
+          entry_id?: string | null;
+        };
         Relationships: [];
       };
       world_entries: {
@@ -417,6 +487,8 @@ export type Campaign = Database["public"]["Tables"]["campaigns"]["Row"];
 export type CampaignMember =
   Database["public"]["Tables"]["campaign_members"]["Row"];
 export type World = Database["public"]["Tables"]["worlds"]["Row"];
+export type CampaignMap = Database["public"]["Tables"]["maps"]["Row"];
+export type MapPin = Database["public"]["Tables"]["map_pins"]["Row"];
 export type WorldEntry = Database["public"]["Tables"]["world_entries"]["Row"];
 export type Character = Database["public"]["Tables"]["characters"]["Row"];
 export type Session = Database["public"]["Tables"]["sessions"]["Row"];
