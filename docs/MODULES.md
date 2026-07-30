@@ -197,10 +197,35 @@ Generator stores favourites in `localStorage`.
 character, following PF2E's maths (`level + proficiency rank + ability modifier`,
 with untrained skills getting no level bonus): all three saves, Perception, Class
 DC, the 16 skills plus Lores, spellcasting by rank, feats, inventory, coins,
-languages, and conditions. Pathbuilder imports already carried this data in the
-`data` jsonb; the sheet now surfaces it. Covered by unit tests that assert the
-derived numbers for a known level-5 character. AI-assisted generation (Phase 6)
-can layer on top of the same pure functions later without changing the UIs.
+languages, and conditions, plus XP progression toward the next level and hero
+points. Pathbuilder imports already carried this data in the `data` jsonb; the
+sheet surfaces it. Covered by unit tests that assert the derived numbers for a
+known level-5 character. AI-assisted generation (Phase 6) can layer on top of the
+same pure functions later without changing the UIs.
+
+**Proficiency rank editor** — `src/modules/characters/proficiency-editor.tsx`
+lets a hand-built character set every rank directly (Perception, the three saves,
+Class DC, all 16 skills, and any number of Lores), previewing the resulting
+modifier live so the PF2E maths stays visible while editing. Without it, ranks
+could only arrive via a Pathbuilder import, so a manually created character
+always showed untrained modifiers.
+
+Two implementation details are worth knowing before editing these forms:
+
+- The editors serialise their state into **hidden JSON inputs** (`proficiencies`,
+  `lores`, `feats`, `equipment`) rather than indexed field names, so adding and
+  removing rows never leaves stale keys in the submitted `FormData`. Lores and
+  equipment emit Pathbuilder's `[name, rank]` / `[name, quantity]` tuple shape,
+  so imported and hand-edited data stay interchangeable. `actions.ts` re-validates
+  everything server-side, clamping ranks to PF2E's `0/2/4/6/8`.
+- Every `TabsContent` in the character form uses **`forceMount`**. Radix unmounts
+  inactive tab panels by default, which would silently drop those fields from the
+  submitted form; the panels are hidden with
+  `data-[state=inactive]:hidden` instead.
+
+`updateCharacter` reads the existing `data` jsonb and spreads the form-owned
+fields over it, so values only a Pathbuilder import supplies (spells, alignment)
+survive a manual edit.
 
 ## Encounters & Rollable Tables (Phase 5)
 

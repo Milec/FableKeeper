@@ -5,7 +5,11 @@ import {
   deriveCoins,
   deriveEquipment,
   deriveFeats,
+  deriveHeroPoints,
+  deriveLorePairs,
   deriveLores,
+  deriveProficiencies,
+  deriveProgression,
   derivePerception,
   deriveSaves,
   deriveSheet,
@@ -14,6 +18,7 @@ import {
   formatModifier,
   RANK_LABELS,
   SKILLS,
+  XP_PER_LEVEL,
 } from "./sheet";
 import { parsePathbuilder } from "./pathbuilder";
 import type { Character } from "@/types/database";
@@ -254,5 +259,76 @@ describe("deriveSheet end to end", () => {
     expect(sheet.feats).toEqual([]);
     expect(sheet.classDc).toBeNull();
     expect(sheet.coins).toEqual({ pp: 0, gp: 0, sp: 0, cp: 0 });
+  });
+});
+
+describe("progression and hero points", () => {
+  it("reports XP toward the next level", () => {
+    expect(deriveProgression({ xp: 250 })).toEqual({
+      xp: 250,
+      xpPerLevel: 1000,
+      percent: 25,
+    });
+  });
+
+  it("defaults to zero and clamps out-of-range XP", () => {
+    expect(deriveProgression({}).xp).toBe(0);
+    expect(deriveProgression({ xp: -50 }).xp).toBe(0);
+    expect(deriveProgression({ xp: 4000 }).xp).toBe(XP_PER_LEVEL);
+    expect(deriveProgression({ xp: "lots" }).xp).toBe(0);
+  });
+
+  it("clamps hero points to 0–3", () => {
+    expect(deriveHeroPoints({})).toBe(0);
+    expect(deriveHeroPoints({ heroPoints: 2 })).toBe(2);
+    expect(deriveHeroPoints({ heroPoints: 9 })).toBe(3);
+    expect(deriveHeroPoints({ heroPoints: -1 })).toBe(0);
+  });
+});
+
+describe("proficiency editing round-trip", () => {
+  it("exposes every editable proficiency key, defaulting to untrained", () => {
+    const ranks = deriveProficiencies({});
+    // 16 skills + perception + 3 saves + class DC
+    expect(Object.keys(ranks)).toHaveLength(SKILLS.length + 5);
+    expect(new Set(Object.values(ranks))).toEqual(new Set([0]));
+    expect(ranks.classDC).toBe(0);
+  });
+
+  it("reads stored ranks back and drops invalid ones", () => {
+    const ranks = deriveProficiencies({
+      proficiencies: { athletics: 6, perception: 4, stealth: 3, bogus: 8 },
+    });
+    expect(ranks.athletics).toBe(6);
+    expect(ranks.perception).toBe(4);
+    // 3 is not a PF2E rank, so it falls back to untrained.
+    expect(ranks.stealth).toBe(0);
+    expect(ranks).not.toHaveProperty("bogus");
+  });
+
+  it("round-trips ranks set in the editor through the sheet maths", () => {
+    // What the editor would submit for a level 5 character.
+    const data = {
+      proficiencies: { athletics: 4, fortitude: 6, classDC: 2 },
+      keyAbility: "str",
+    };
+    const abilities = { str: 18, dex: 12, con: 14, int: 10, wis: 12, cha: 10 };
+    // Expert (4) + level 5 + Str +4
+    expect(deriveSkills(5, abilities, data).find((s) => s.key === "athletics")!.modifier).toBe(13);
+    // Master (6) + level 5 + Con +2
+    expect(deriveSaves(5, abilities, data).find((s) => s.key === "fortitude")!.modifier).toBe(13);
+    expect(deriveClassDc(5, abilities, data)).toBe(10 + 5 + 2 + 4);
+  });
+
+  it("round-trips lore names and ranks", () => {
+    const pairs = deriveLorePairs({
+      lores: [["Warfare", 4], ["Absalom", 2], ["Rank-less"], [42, 2], "junk"],
+    });
+    expect(pairs).toEqual([
+      { name: "Warfare", rank: 4 },
+      { name: "Absalom", rank: 2 },
+      // A missing rank means untrained rather than a dropped row.
+      { name: "Rank-less", rank: 0 },
+    ]);
   });
 });

@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { parsePathbuilder, PathbuilderParseError } from "./pathbuilder";
+import { XP_PER_LEVEL } from "./sheet";
 import type { Json } from "@/types/database";
 
 export interface CharacterActionState {
@@ -25,8 +26,36 @@ const characterSchema = z.object({
   background: z.string().max(120).optional(),
   characterClass: z.string().max(120).optional(),
   level: z.coerce.number().int().min(1).max(20),
+  keyAbility: z.string().max(3).optional(),
+  deity: z.string().max(120).optional(),
   portraitUrl: z.string().url().optional().or(z.literal("")),
 });
+
+/** The fields of `characters.data` this form owns, ready to merge. */
+function readSheetData(
+  formData: FormData,
+  { deity, keyAbility }: { deity?: string; keyAbility: string | null },
+) {
+  const notes = formData.get("notes");
+  const xp = readInt(formData, "xp", 0, XP_PER_LEVEL);
+  const heroPoints = readInt(formData, "heroPoints", 0, 3);
+  return {
+    notes: typeof notes === "string" ? notes : "",
+    // Mirrored from the column so Class DC derivation works the same way for
+    // hand-built characters as it does for Pathbuilder imports.
+    keyAbility,
+    coins: readCoins(formData),
+    languages: readList(formData, "languages"),
+    conditions: readList(formData, "conditions"),
+    proficiencies: readProficiencies(formData),
+    lores: readLores(formData),
+    feats: readFeats(formData),
+    equipment: readEquipment(formData),
+    deity: deity ?? null,
+    xp: xp ?? 0,
+    heroPoints: heroPoints ?? 0,
+  };
+}
 
 function readAbilities(formData: FormData) {
   const abilities: Record<string, number> = {};
@@ -47,6 +76,78 @@ function readCoins(formData: FormData) {
     if (Number.isFinite(n) && n > 0) coins[key] = n;
   }
   return coins;
+}
+
+/** Parse a hidden JSON field, returning `fallback` on anything unexpected. */
+function readJson<T>(formData: FormData, field: string, fallback: T): T {
+  const raw = formData.get(field);
+  if (typeof raw !== "string" || !raw.trim()) return fallback;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return fallback;
+  }
+}
+
+const VALID_RANKS = new Set([0, 2, 4, 6, 8]);
+
+/** Proficiency ranks from the rank editor, clamped to valid PF2E ranks. */
+function readProficiencies(formData: FormData): Record<string, number> {
+  const raw = readJson<Record<string, unknown>>(formData, "proficiencies", {});
+  const out: Record<string, number> = {};
+  for (const [key, value] of Object.entries(raw)) {
+    if (typeof value === "number" && VALID_RANKS.has(value)) out[key] = value;
+  }
+  return out;
+}
+
+/** Lore skills as Pathbuilder-compatible [name, rank] tuples. */
+function readLores(formData: FormData): [string, number][] {
+  const raw = readJson<unknown[]>(formData, "lores", []);
+  const out: [string, number][] = [];
+  for (const entry of raw) {
+    if (!Array.isArray(entry)) continue;
+    const name = typeof entry[0] === "string" ? entry[0].trim() : "";
+    const rank = typeof entry[1] === "number" && VALID_RANKS.has(entry[1]) ? entry[1] : 0;
+    if (name) out.push([name.slice(0, 60), rank]);
+  }
+  return out.slice(0, 30);
+}
+
+/** Feats as a flat list of names. */
+function readFeats(formData: FormData): string[] {
+  const raw = readJson<unknown[]>(formData, "feats", []);
+  return raw
+    .filter((f): f is string => typeof f === "string" && f.trim().length > 0)
+    .map((f) => f.trim().slice(0, 120))
+    .slice(0, 200);
+}
+
+/** Equipment as Pathbuilder-compatible [name, quantity] tuples. */
+function readEquipment(formData: FormData): [string, number][] {
+  const raw = readJson<unknown[]>(formData, "equipment", []);
+  const out: [string, number][] = [];
+  for (const entry of raw) {
+    if (!Array.isArray(entry)) continue;
+    const name = typeof entry[0] === "string" ? entry[0].trim() : "";
+    const qty = typeof entry[1] === "number" && entry[1] > 0 ? Math.floor(entry[1]) : 1;
+    if (name) out.push([name.slice(0, 120), Math.min(qty, 9999)]);
+  }
+  return out.slice(0, 300);
+}
+
+/** A bounded integer field, or undefined when blank. */
+function readInt(
+  formData: FormData,
+  field: string,
+  min: number,
+  max: number,
+): number | undefined {
+  const raw = formData.get(field);
+  if (typeof raw !== "string" || !raw.trim()) return undefined;
+  const n = Number.parseInt(raw, 10);
+  if (!Number.isFinite(n)) return undefined;
+  return Math.max(min, Math.min(max, n));
 }
 
 /** Split a comma-separated field into a trimmed, de-duplicated list. */
@@ -85,11 +186,15 @@ export async function createCharacter(
     background: formData.get("background") || undefined,
     characterClass: formData.get("characterClass") || undefined,
     level: formData.get("level") ?? 1,
+    keyAbility: formData.get("keyAbility") || undefined,
+    deity: formData.get("deity") || undefined,
     portraitUrl: formData.get("portraitUrl") || "",
   });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
   }
+
+  const keyAbility = parsed.data.keyAbility?.toLowerCase() ?? null;
 
   const supabase = await createClient();
   const {
@@ -97,7 +202,6 @@ export async function createCharacter(
   } = await supabase.auth.getUser();
   if (!user) return { error: "You must be signed in." };
 
-  const notes = formData.get("notes");
   const { data, error } = await supabase
     .from("characters")
     .insert({
@@ -109,15 +213,14 @@ export async function createCharacter(
       background: parsed.data.background ?? null,
       class: parsed.data.characterClass ?? null,
       level: parsed.data.level,
+      key_ability: keyAbility,
       portrait_url: parsed.data.portraitUrl || null,
       abilities: readAbilities(formData),
       defenses: readDefenses(formData),
-      data: {
-        notes: typeof notes === "string" ? notes : "",
-        coins: readCoins(formData),
-        languages: readList(formData, "languages"),
-        conditions: readList(formData, "conditions"),
-      },
+      data: readSheetData(formData, {
+        deity: parsed.data.deity,
+        keyAbility,
+      }) as unknown as Json,
     })
     .select("id")
     .single();
@@ -143,15 +246,19 @@ export async function updateCharacter(
     background: formData.get("background") || undefined,
     characterClass: formData.get("characterClass") || undefined,
     level: formData.get("level") ?? 1,
+    keyAbility: formData.get("keyAbility") || undefined,
+    deity: formData.get("deity") || undefined,
     portraitUrl: formData.get("portraitUrl") || "",
   });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
   }
 
+  const keyAbility = parsed.data.keyAbility?.toLowerCase() ?? null;
+
   const supabase = await createClient();
-  // Preserve everything else in `data` (imported feats, spells, proficiencies)
-  // and update only the fields this form owns.
+  // Preserve everything else in `data` (imported spells, alignment, ancestry
+  // feats) and overwrite only the fields this form owns.
   const { data: existing } = await supabase
     .from("characters")
     .select("data")
@@ -161,7 +268,6 @@ export async function updateCharacter(
     existing?.data && typeof existing.data === "object"
       ? (existing.data as Record<string, unknown>)
       : {};
-  const notes = formData.get("notes");
 
   const { error } = await supabase
     .from("characters")
@@ -172,16 +278,17 @@ export async function updateCharacter(
       background: parsed.data.background ?? null,
       class: parsed.data.characterClass ?? null,
       level: parsed.data.level,
+      key_ability: keyAbility,
       portrait_url: parsed.data.portraitUrl || null,
       abilities: readAbilities(formData),
       defenses: readDefenses(formData),
       data: {
         ...prevData,
-        notes: typeof notes === "string" ? notes : "",
-        coins: readCoins(formData),
-        languages: readList(formData, "languages"),
-        conditions: readList(formData, "conditions"),
-      },
+        ...readSheetData(formData, {
+          deity: parsed.data.deity,
+          keyAbility,
+        }),
+      } as unknown as Json,
     })
     .eq("id", characterId);
 

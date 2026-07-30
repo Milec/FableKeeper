@@ -79,6 +79,10 @@ export interface CharacterData {
   /** Coins, when tracked: {pp, gp, sp, cp}. */
   coins?: Record<string, unknown>;
   conditions?: unknown;
+  /** XP toward the next level (0–1000). */
+  xp?: unknown;
+  /** Hero points, 0–3. */
+  heroPoints?: unknown;
 }
 
 export function characterData(character: Pick<Character, "data">): CharacterData {
@@ -276,6 +280,73 @@ export function deriveConditions(data: CharacterData): string[] {
   return raw.filter((c): c is string => typeof c === "string" && c.trim().length > 0);
 }
 
+/** PF2E awards a level every 1,000 XP. */
+export const XP_PER_LEVEL = 1000;
+
+export interface Progression {
+  /** XP earned toward the current level (0 … 999). */
+  xp: number;
+  xpPerLevel: number;
+  /** Percentage toward the next level, 0–100. */
+  percent: number;
+}
+
+export function deriveProgression(data: CharacterData): Progression {
+  const raw = typeof data.xp === "number" && Number.isFinite(data.xp) ? data.xp : 0;
+  const xp = Math.max(0, Math.min(XP_PER_LEVEL, Math.round(raw)));
+  return {
+    xp,
+    xpPerLevel: XP_PER_LEVEL,
+    percent: Math.round((xp / XP_PER_LEVEL) * 100),
+  };
+}
+
+/** Hero points, capped at the usual 3. */
+export function deriveHeroPoints(data: CharacterData): number {
+  const raw = typeof data.heroPoints === "number" ? data.heroPoints : 0;
+  return Math.max(0, Math.min(3, Math.round(raw)));
+}
+
+/** Every proficiency key the rank editor manages. */
+export const PROFICIENCY_KEYS = [
+  "perception",
+  "fortitude",
+  "reflex",
+  "will",
+  "classDC",
+  ...SKILLS.map((s) => s.key),
+] as const;
+
+/** Read the stored proficiency map, clamped to valid ranks. */
+export function deriveProficiencies(
+  data: CharacterData,
+): Record<string, ProficiencyRank> {
+  const out: Record<string, ProficiencyRank> = {};
+  for (const key of PROFICIENCY_KEYS) {
+    out[key] = rankOf(data.proficiencies, key);
+  }
+  return out;
+}
+
+/** Lores as editable [name, rank] pairs (before modifiers are computed). */
+export function deriveLorePairs(
+  data: CharacterData,
+): { name: string; rank: ProficiencyRank }[] {
+  const raw = Array.isArray(data.lores) ? data.lores : [];
+  const out: { name: string; rank: ProficiencyRank }[] = [];
+  for (const entry of raw) {
+    if (!Array.isArray(entry)) continue;
+    const name = typeof entry[0] === "string" ? entry[0] : null;
+    if (!name) continue;
+    const r = typeof entry[1] === "number" ? entry[1] : 0;
+    out.push({
+      name,
+      rank: (PROFICIENCY_RANKS.includes(r as ProficiencyRank) ? r : 0) as ProficiencyRank,
+    });
+  }
+  return out;
+}
+
 export interface DerivedSheet {
   level: number;
   abilities: AbilityScores;
@@ -292,6 +363,10 @@ export interface DerivedSheet {
   coins: { pp: number; gp: number; sp: number; cp: number };
   conditions: string[];
   notes: string;
+  deity: string | null;
+  alignment: string | null;
+  progression: Progression;
+  heroPoints: number;
 }
 
 /** Everything a character sheet needs, derived in one pass. */
@@ -317,5 +392,10 @@ export function deriveSheet(character: Character): DerivedSheet {
     coins: deriveCoins(data),
     conditions: deriveConditions(data),
     notes: typeof data.notes === "string" ? data.notes : "",
+    deity: typeof data.deity === "string" && data.deity.trim() ? data.deity : null,
+    alignment:
+      typeof data.alignment === "string" && data.alignment.trim() ? data.alignment : null,
+    progression: deriveProgression(data),
+    heroPoints: deriveHeroPoints(data),
   };
 }

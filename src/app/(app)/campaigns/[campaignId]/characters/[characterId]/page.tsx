@@ -85,8 +85,8 @@ export default async function CharacterSheetPage({
       </Button>
 
       {/* Identity */}
-      <div className="flex flex-wrap items-start gap-5">
-        <div className="relative h-28 w-28 shrink-0 overflow-hidden rounded-xl border bg-muted">
+      <div className="flex flex-wrap items-start gap-4 sm:gap-5">
+        <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-xl border bg-muted sm:h-28 sm:w-28">
           {character.portrait_url ? (
             <Image
               src={character.portrait_url}
@@ -101,8 +101,15 @@ export default async function CharacterSheetPage({
             </div>
           )}
         </div>
-        <div className="min-w-0 flex-1">
-          <h1 className="font-display text-3xl font-bold">{character.name}</h1>
+        {/*
+          A hard min-width keeps this block from collapsing to near-zero on a
+          phone, which squeezed the name into one word per line and pushed the
+          action buttons over it instead of wrapping them below.
+        */}
+        <div className="min-w-[12rem] flex-1">
+          <h1 className="font-display text-2xl font-bold sm:text-3xl">
+            {character.name}
+          </h1>
           <p className="text-muted-foreground">{identity || "Adventurer"}</p>
           <div className="mt-2 flex flex-wrap gap-1.5">
             <Badge variant="secondary">Level {sheet.level}</Badge>
@@ -114,10 +121,14 @@ export default async function CharacterSheetPage({
             {sheet.classDc !== null && (
               <Badge variant="outline">Class DC {sheet.classDc}</Badge>
             )}
+            {sheet.deity && <Badge variant="outline">{sheet.deity}</Badge>}
+            {sheet.alignment && (
+              <Badge variant="outline">{sheet.alignment}</Badge>
+            )}
           </div>
         </div>
         {canEdit && (
-          <div className="flex gap-2">
+          <div className="flex w-full gap-2 sm:w-auto">
             <Button variant="outline" size="sm" asChild>
               <a href={`${base}/${characterId}/export`} download>
                 <Download className="h-4 w-4" />
@@ -132,6 +143,56 @@ export default async function CharacterSheetPage({
             </Button>
           </div>
         )}
+      </div>
+
+      {/* Progression & hero points */}
+      <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
+        <Card>
+          <CardContent className="py-3">
+            <div className="flex items-baseline justify-between text-xs">
+              <span className="font-semibold uppercase tracking-wide text-muted-foreground">
+                Experience
+              </span>
+              <span className="tabular-nums text-muted-foreground">
+                {sheet.progression.xp} / {sheet.progression.xpPerLevel} XP to
+                level {Math.min(20, sheet.level + 1)}
+              </span>
+            </div>
+            <div
+              className="mt-2 h-2 overflow-hidden rounded-full bg-muted"
+              role="progressbar"
+              aria-valuenow={sheet.progression.percent}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-label="Experience toward next level"
+            >
+              <div
+                className="h-full rounded-full bg-primary transition-all"
+                style={{ width: `${sheet.progression.percent}%` }}
+              />
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="flex h-full flex-col justify-center gap-1.5 py-3">
+            <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Hero points
+            </span>
+            <div className="flex gap-1.5" aria-label={`${sheet.heroPoints} of 3 hero points`}>
+              {[1, 2, 3].map((n) => (
+                <span
+                  key={n}
+                  aria-hidden
+                  className={`h-4 w-4 rounded-full border-2 ${
+                    n <= sheet.heroPoints
+                      ? "border-primary bg-primary"
+                      : "border-muted-foreground/40"
+                  }`}
+                />
+              ))}
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Conditions */}

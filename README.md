@@ -35,8 +35,10 @@ FableKeeper is being built iteratively. **Phases 1–5 are implemented** in this
 - ✅ **Global search** — a full search page plus a ⌘K command palette, both RLS-scoped so players never see secrets
 
 **Phase 3 — Character & Campaign Managers**
-- ✅ Complete PF2E **character sheets** — identity, ability scores, AC/HP, **all three saves**, Perception, **Class DC**, all **16 skills plus Lores** with computed modifiers and proficiency ranks, **spellcasting** by rank, feats, **inventory and coin purse**, languages, speed, active **conditions**, and a markdown journal
-- ✅ **Pathbuilder import** (paste JSON export) and **character export** (download JSON) — imported proficiencies, lores, spells, and equipment all surface on the sheet
+- ✅ Complete PF2E **character sheets** — identity, deity, ability scores, AC/HP, **all three saves**, Perception, **Class DC**, all **16 skills plus Lores** with computed modifiers and proficiency ranks, **spellcasting** by rank, feats, **inventory and coin purse**, languages, speed, active **conditions**, **XP progression**, **hero points**, and a markdown journal
+- ✅ **Proficiency rank editor** — set Perception, saves, Class DC, all 16 skills, and any number of Lores directly, with the resulting modifier previewed live as you change ranks, levels, or ability scores
+- ✅ **Row editors for feats and inventory**, so a hand-built character is as complete as an imported one
+- ✅ **Pathbuilder import** (paste JSON export) and **character export** (download JSON) — imported proficiencies, lores, spells, and equipment all surface on the sheet, and a manual edit never overwrites them
 - ✅ **Image storage** — portraits and other campaign media uploaded to Supabase Storage, with uploads restricted to campaign members by RLS
 - ✅ **Session tracker** with dated recap notes and GM-only planning sessions
 - ✅ **Quest tracker** grouped by status (active / on hold / completed / failed), with GM-secret quests
