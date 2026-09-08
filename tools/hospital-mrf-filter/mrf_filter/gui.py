@@ -8,8 +8,8 @@ import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
-from .engine import export_filtered, scan_distinct
-from .model import CancelledError, Progress, SchemaSample
+from .engine import DISTINCT_VALUE_LIMIT, export_filtered, scan_distinct
+from .model import CancelledError, Progress, ScanResult, SchemaSample
 from .readers import sample_schema
 from .standards import TARGET_BY_NAME, TARGET_FIELDS, ms_drg_reference, suggest_mappings
 from .storage import AppStorage
@@ -23,16 +23,34 @@ NOT_MAPPED = "(not mapped)"
 MAX_SHOWN_VALUES = 5000
 
 
-class ValueSelector(ttk.Frame):
-    """Searchable, capped list of distinct values with selection kept by value."""
+def format_duration(seconds: float) -> str:
+    if seconds < 90:
+        return f"{seconds:.0f}s"
+    if seconds < 5400:
+        return f"{seconds / 60:.0f}m"
+    return f"{seconds / 3600:.1f}h"
 
-    def __init__(self, parent: tk.Misc, values: list[str]):
+
+class ValueSelector(ttk.Frame):
+    """Searchable list of distinct values, with selection kept by value.
+
+    ``truncated`` says the scan stopped collecting before the column ran out of
+    distinct values, so the list is a partial sample. Values that are not in the
+    list can still be filtered on by typing them.
+    """
+
+    def __init__(self, parent: tk.Misc, values: list[str], truncated: bool = False):
         super().__init__(parent, padding=6)
         self.values = values
+        self.truncated = truncated
         self.selected: set[str] = set()
+        self.typed: set[str] = set()
         self.shown: list[str] = []
         self.match_count = len(values)
         self._syncing = False
+        # Casefolding on every keystroke over a quarter of a million values is
+        # a visible stall; fold once and search the folded copy.
+        self._folded = [value.casefold() for value in values]
 
         controls = ttk.Frame(self)
         controls.pack(fill="x")
@@ -44,12 +62,31 @@ class ValueSelector(ttk.Frame):
         ttk.Button(controls, text="Select all shown", command=self._select_shown).pack(side="left")
         ttk.Button(controls, text="Clear selection", command=self._clear).pack(side="left", padx=(6, 0))
 
+        if truncated:
+            ttk.Label(
+                self,
+                text=f"This column has more than {len(values):,} distinct values, so the list below is "
+                     "a partial sample. Type any value you need and click Add.",
+                foreground="#8a4b00",
+                wraplength=1000,
+                justify="left",
+            ).pack(anchor="w", pady=(6, 0))
+
+        manual = ttk.Frame(self)
+        manual.pack(fill="x", pady=(6, 0))
+        ttk.Label(manual, text="Add exact value:").pack(side="left")
+        self.manual_value = tk.StringVar()
+        manual_entry = ttk.Entry(manual, textvariable=self.manual_value)
+        manual_entry.pack(side="left", fill="x", expand=True, padx=(6, 10))
+        manual_entry.bind("<Return>", lambda _event: self._add_typed())
+        ttk.Button(manual, text="Add", command=self._add_typed).pack(side="left")
+
         self.summary = tk.StringVar()
         ttk.Label(self, textvariable=self.summary, foreground="#555").pack(anchor="w", pady=(6, 0))
 
         body = ttk.Frame(self)
         body.pack(fill="both", expand=True, pady=(4, 0))
-        self.listbox = tk.Listbox(body, selectmode="extended", exportselection=False)
+        self.listbox = tk.Listbox(body, selectmode="extended", exportselection=False, height=6)
         scrollbar = ttk.Scrollbar(body, orient="vertical", command=self.listbox.yview)
         self.listbox.configure(yscrollcommand=scrollbar.set)
         self.listbox.pack(side="left", fill="both", expand=True)
@@ -57,11 +94,19 @@ class ValueSelector(ttk.Frame):
         self.listbox.bind("<<ListboxSelect>>", self._on_select)
         self._refresh()
 
+    def _matches(self, needle: str) -> list[str]:
+        # Values typed by hand are pinned to the top so they stay reachable even
+        # when they are not in the scanned list at all.
+        typed = sorted(self.typed, key=str.casefold)
+        if not needle:
+            return typed + self.values
+        return ([value for value in typed if needle in value.casefold()]
+                + [value for value, folded in zip(self.values, self._folded) if needle in folded])
+
     def _refresh(self) -> None:
-        needle = self.query.get().strip().casefold()
-        matches = [value for value in self.values if needle in value.casefold()] if needle else self.values
+        matches = self._matches(self.query.get().strip().casefold())
         self.match_count = len(matches)
-        self.shown = list(matches[:MAX_SHOWN_VALUES])
+        self.shown = matches[:MAX_SHOWN_VALUES]
         self._syncing = True
         self.listbox.delete(0, "end")
         for value in self.shown:
@@ -73,14 +118,26 @@ class ValueSelector(ttk.Frame):
         self._update_summary()
 
     def _update_summary(self) -> None:
-        match_count = self.match_count
-        hidden = match_count - len(self.shown)
-        text = f"{len(self.selected):,} selected of {len(self.values):,} distinct"
-        if match_count != len(self.values):
-            text += f" · {match_count:,} match the search"
+        total = len(self.values) + len(self.typed)
+        hidden = self.match_count - len(self.shown)
+        distinct = f"{len(self.values):,}+" if self.truncated else f"{total:,}"
+        text = f"{len(self.selected):,} selected of {distinct} distinct"
+        if self.match_count != total:
+            text += f" · {self.match_count:,} match the search"
         if hidden > 0:
             text += f" · showing the first {len(self.shown):,}, narrow the search to reach the other {hidden:,}"
         self.summary.set(text)
+
+    def _add_typed(self) -> None:
+        value = self.manual_value.get().strip()
+        if not value:
+            return
+        if value not in self.values:
+            self.typed.add(value)
+        self.selected.add(value)
+        self.manual_value.set("")
+        self.query.set("")
+        self._refresh()
 
     def _on_select(self, _event: object) -> None:
         if self._syncing:
@@ -103,8 +160,8 @@ class MRFApp(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
         self.title("Hospital MRF Filter")
-        self.geometry("1120x760")
-        self.minsize(900, 640)
+        self.geometry("1120x820")
+        self.minsize(940, 680)
         self.storage = AppStorage()
         self.sample: SchemaSample | None = None
         self.mapping: dict[str, str] = {}
@@ -258,7 +315,7 @@ class MRFApp(tk.Tk):
                  "is not MS-DRG 470.",
             foreground="#555",
         ).pack(anchor="w", pady=(6, 0))
-        self.drg_list = tk.Listbox(fixed, selectmode="extended", exportselection=False, height=5)
+        self.drg_list = tk.Listbox(fixed, selectmode="extended", exportselection=False, height=4)
         for code in ms_drg_reference():
             self.drg_list.insert("end", code)
         self.drg_list.pack(fill="x", pady=(8, 0))
@@ -386,21 +443,24 @@ class MRFApp(tk.Tk):
 
         def worker():
             try:
-                found, _digest, cached = scan_distinct(
+                result = scan_distinct(
                     spec, columns, self.storage, callback=self._report, cancel=self.cancel_event)
-                self.events.put(("scan_done", (targets, found, cached)))
+                self.events.put(("scan_done", (targets, result)))
             except BaseException as exc:
                 self.events.put(("error", exc))
         self._start("Scanning distinct values...", worker)
 
-    def _populate_values(self, targets: list[str], found: dict[str, list[str]]) -> None:
+    def _populate_values(self, targets: list[str], result: ScanResult) -> None:
         for child in self.value_notebook.winfo_children():
             child.destroy()
         self.selectors.clear()
         for target in targets:
-            values = found[self.mapping[target]]
-            selector = ValueSelector(self.value_notebook, values)
-            self.value_notebook.add(selector, text=f"{TARGET_BY_NAME[target].label} ({len(values):,})")
+            column = self.mapping[target]
+            values = result.values[column]
+            truncated = column in result.truncated
+            selector = ValueSelector(self.value_notebook, values, truncated)
+            count = f"{len(values):,}+" if truncated else f"{len(values):,}"
+            self.value_notebook.add(selector, text=f"{TARGET_BY_NAME[target].label} ({count})")
             self.selectors[target] = selector
 
     def _export(self) -> None:
@@ -462,7 +522,12 @@ class MRFApp(tk.Tk):
                         text += f", {value.matched:,} matched"
                     elif value.phase == "Schema scan":
                         text += f", {value.matched:,} fields found"
-                    text += f" ({value.fraction:.1%} of file bytes)"
+                    text += f" · {value.fraction:.1%} of file bytes"
+                    if value.records_per_second:
+                        text += f" · {value.records_per_second / 1000:,.0f}k rows/s"
+                    remaining = value.seconds_remaining
+                    if remaining is not None:
+                        text += f" · about {format_duration(remaining)} left"
                     self.status.set(text)
                 elif event == "sample_done":
                     self.sample = payload
@@ -477,11 +542,17 @@ class MRFApp(tk.Tk):
                         f"Found {len(self.sample.headers)} fields; format: {self.sample.spec.kind.upper()}{detail}."
                     )
                 elif event == "scan_done":
-                    targets, found, cached = payload
+                    targets, result = payload
                     self._finish_busy()
-                    self._populate_values(targets, found)
-                    count = sum(len(values) for values in found.values())
-                    suffix = " (loaded from cache)" if cached else ""
+                    self._populate_values(targets, result)
+                    count = sum(len(values) for values in result.values.values())
+                    suffix = " (loaded from cache)" if result.from_cache else ""
+                    if result.truncated:
+                        labels = ", ".join(
+                            TARGET_BY_NAME[target].label for target in targets
+                            if self.mapping[target] in result.truncated)
+                        suffix += (f" — {labels} exceeded {DISTINCT_VALUE_LIMIT:,} distinct values, "
+                                   "so those lists are partial")
                     self.status.set(f"Found {count:,} distinct values{suffix}.")
                 elif event == "export_done":
                     output, (processed, matched) = payload

@@ -35,10 +35,33 @@ class Progress:
     matched: int
     bytes_read: int
     total_bytes: int
+    elapsed: float = 0.0
 
     @property
     def fraction(self) -> float:
         return min(1.0, self.bytes_read / self.total_bytes) if self.total_bytes else 0.0
+
+    @property
+    def records_per_second(self) -> float:
+        return self.records / self.elapsed if self.elapsed > 0 else 0.0
+
+    @property
+    def seconds_remaining(self) -> float | None:
+        """Projected from bytes consumed; None until there is enough to project."""
+        done = self.fraction
+        if self.elapsed < 2.0 or done <= 0.01 or done >= 1.0:
+            return None
+        return self.elapsed * (1.0 - done) / done
+
+
+@dataclass(frozen=True)
+class ScanResult:
+    """Distinct values for the scanned columns, and whether any list is partial."""
+
+    values: dict[str, list[str]]
+    truncated: frozenset[str]
+    file_sha256: str
+    from_cache: bool
 
 
 ProgressCallback = Callable[[Progress], None]

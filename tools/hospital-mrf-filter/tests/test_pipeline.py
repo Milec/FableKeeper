@@ -11,8 +11,8 @@ from pathlib import Path
 import pytest
 
 from mrf_filter.engine import export_filtered, scan_distinct
-from mrf_filter.model import CancelledError
-from mrf_filter.readers import container_suffix, detect_kind, sample_schema
+from mrf_filter.model import CancelledError, FileSpec, Progress
+from mrf_filter.readers import container_suffix, detect_kind, iter_rows, sample_schema
 from mrf_filter.standards import (
     is_ms_drg_type,
     ms_drg_reference,
@@ -92,11 +92,12 @@ def test_csv_end_to_end_and_cache(tmp_path: Path) -> None:
     suggestions = suggest_mappings(sample.headers)
     assert suggestions["payer_name"][0] == "Payer / MAO"
     storage = AppStorage(tmp_path / "state")
-    values, digest, cached = scan_distinct(sample.spec, ["Payer / MAO", "Plan"], storage)
-    assert values["Payer / MAO"] == ["Aetna", "Cigna"]
-    assert len(digest) == 64 and not cached
-    values2, digest2, cached2 = scan_distinct(sample.spec, ["Payer / MAO", "Plan"], storage)
-    assert values2 == values and digest2 == digest and cached2
+    scan = scan_distinct(sample.spec, ["Payer / MAO", "Plan"], storage)
+    assert scan.values["Payer / MAO"] == ["Aetna", "Cigna"]
+    assert len(scan.file_sha256) == 64 and not scan.from_cache and not scan.truncated
+    again = scan_distinct(sample.spec, ["Payer / MAO", "Plan"], storage)
+    assert again.values == scan.values and again.file_sha256 == scan.file_sha256
+    assert again.from_cache and not again.truncated
 
     output = tmp_path / "out.csv"
     mapping = {
@@ -137,8 +138,7 @@ def test_csv_metadata_preamble_header_detection_override_and_persistence(tmp_pat
     assert storage.load_header_row("ETMC") == 3
     assert storage.load_mapping("ETMC", sample.headers) == {"payer_name": "Payer Name"}
 
-    values, _, _ = scan_distinct(sample.spec, ["Payer Name"], storage)
-    assert values["Payer Name"] == ["Aetna", "Cigna"]
+    assert scan_distinct(sample.spec, ["Payer Name"], storage).values["Payer Name"] == ["Aetna", "Cigna"]
     output = tmp_path / "preamble_out.csv"
     processed, matched = export_filtered(
         sample.spec,
@@ -199,8 +199,8 @@ def test_nested_cms_json_is_streamed_and_exploded(tmp_path: Path) -> None:
     assert sample.spec.json_prefix == "standard_charge_information.item"
     assert "standard_charges.payer_name" in sample.headers
     storage = AppStorage(tmp_path / "state")
-    values, _, _ = scan_distinct(sample.spec, ["standard_charges.payer_name"], storage)
-    assert values["standard_charges.payer_name"] == ["Aetna", "Cigna"]
+    scan = scan_distinct(sample.spec, ["standard_charges.payer_name"], storage)
+    assert scan.values["standard_charges.payer_name"] == ["Aetna", "Cigna"]
     mapping = {
         "description": "description",
         "billing_code": "code_information.code",
@@ -348,9 +348,9 @@ def test_gzip_and_zip_inputs_are_read_transparently(tmp_path: Path) -> None:
         assert sample.spec.header_row == 2
         assert "payer_name" in sample.headers
         storage = AppStorage(tmp_path / f"state-{source.suffix}")
-        values, digest, _cached = scan_distinct(sample.spec, ["payer_name"], storage)
-        assert values["payer_name"] == ["Aetna", "Cigna"]
-        assert len(digest) == 64
+        scan = scan_distinct(sample.spec, ["payer_name"], storage)
+        assert scan.values["payer_name"] == ["Aetna", "Cigna"]
+        assert len(scan.file_sha256) == 64
         output = tmp_path / f"out{source.suffix}.csv"
         processed, matched = export_filtered(
             sample.spec, output, {"description": "description", "payer_name": "payer_name"},
@@ -384,8 +384,7 @@ def test_undecodable_byte_does_not_abort_the_stream(tmp_path: Path) -> None:
 
     sample = sample_schema(source)
     storage = AppStorage(tmp_path / "state")
-    values, _digest, _cached = scan_distinct(sample.spec, ["payer_name"], storage)
-    assert values["payer_name"] == ["Cigna", "Moda"]
+    assert scan_distinct(sample.spec, ["payer_name"], storage).values["payer_name"] == ["Cigna", "Moda"]
     output = tmp_path / "out.csv"
     processed, matched = export_filtered(
         sample.spec, output, {"description": "description", "payer_name": "payer_name"}, {})
@@ -519,3 +518,180 @@ def test_gui_workflow_end_to_end(tmp_path: Path, monkeypatch) -> None:
         rows = list(csv.DictReader(handle))
     assert len(rows) == 2
     assert {row["payer_name"] for row in rows} == {"Cigna"}
+
+
+def test_ragged_rows_keep_the_old_column_alignment(tmp_path: Path) -> None:
+    """Short rows pad, long rows truncate — unchanged by the dict(zip) fast path."""
+    source = tmp_path / "ragged.csv"
+    source.write_text(
+        "description,code,payer_name\n"
+        "Sepsis,871,Aetna\n"
+        "Short row,470\n"
+        "Long row,291,Cigna,extra,more\n",
+        encoding="utf-8",
+    )
+    sample = sample_schema(source)
+    spec = FileSpec(path=source, kind="csv", encoding="utf-8-sig", delimiter=",", header_row=0)
+    rows = list(iter_rows(spec))
+    assert rows[0] == {"description": "Sepsis", "code": "871", "payer_name": "Aetna"}
+    assert rows[1] == {"description": "Short row", "code": "470", "payer_name": ""}
+    assert rows[2] == {"description": "Long row", "code": "291", "payer_name": "Cigna"}
+    assert sample.headers == ["description", "code", "payer_name"]
+
+
+def test_distinct_scan_stops_collecting_at_the_limit(tmp_path: Path) -> None:
+    """Bounds memory on a free-text column with millions of distinct values."""
+    rows = [cms_row(f"Item {index}", str(index), "CPT", f"Payer {index % 4}", "PPO", "100")
+            for index in range(500)]
+    source = write_cms_csv(tmp_path / "wide_cardinality.csv", rows)
+    sample = sample_schema(source)
+    storage = AppStorage(tmp_path / "state")
+
+    scan = scan_distinct(sample.spec, ["description", "payer_name"], storage, limit=50)
+    assert scan.truncated == frozenset({"description"})
+    assert len(scan.values["description"]) == 50
+    assert len(scan.values["payer_name"]) == 4
+    # The pass still runs to the end, so the digest and record count stay right.
+    assert len(scan.file_sha256) == 64
+
+    cached = scan_distinct(sample.spec, ["description", "payer_name"], storage, limit=50)
+    assert cached.from_cache
+    assert cached.truncated == frozenset({"description"}), "a partial list must not look complete"
+
+
+def test_progress_reports_rate_and_projected_time_remaining() -> None:
+    early = Progress("Filter and export", 1_000_000, 10, 1_000, 10_000, elapsed=10.0)
+    assert early.records_per_second == 100_000
+    assert early.seconds_remaining == pytest.approx(90.0)
+
+    # Too early, and already finished, both project nothing.
+    assert Progress("x", 10, 0, 1, 10_000, elapsed=0.5).seconds_remaining is None
+    assert Progress("x", 10, 0, 10_000, 10_000, elapsed=30.0).seconds_remaining is None
+    assert Progress("x", 0, 0, 0, 0).records_per_second == 0.0
+
+    format_duration = pytest.importorskip("mrf_filter.gui").format_duration
+    assert format_duration(45) == "45s"
+    assert format_duration(600) == "10m"
+    assert format_duration(9000) == "2.5h"
+
+
+def test_value_selector_handles_a_truncated_column(tmp_path: Path, monkeypatch) -> None:
+    """A value missing from a partial list is still reachable by typing it."""
+    tkinter = pytest.importorskip("tkinter")
+    from mrf_filter import gui as gui_module
+
+    try:
+        root = tkinter.Tk()
+    except tkinter.TclError as exc:
+        pytest.skip(f"Tk is unavailable: {exc}")
+
+    try:
+        selector = gui_module.ValueSelector(root, ["Aetna", "Anthem", "Cigna"], truncated=True)
+        assert "partial sample" in selector.summary.get() or selector.truncated
+        assert "3+ distinct" in selector.summary.get()
+
+        selector.manual_value.set("  United Healthcare  ")
+        selector._add_typed()
+        assert selector.selected == {"United Healthcare"}
+        assert selector.shown[0] == "United Healthcare", "typed values pin to the top"
+
+        selector.query.set("aet")
+        root.update()
+        assert selector.shown == ["Aetna"]
+        assert selector.selected == {"United Healthcare"}, "search must not drop a selection"
+    finally:
+        root.destroy()
+
+
+def test_unbalanced_quote_fails_with_a_locating_message(tmp_path: Path, monkeypatch) -> None:
+    """Without a field bound, one stray quote in a 9 GB MRF is an OOM kill."""
+    from mrf_filter import readers
+
+    monkeypatch.setattr(readers, "CSV_MAX_FIELD_BYTES", 2048)
+    source = tmp_path / "unbalanced.csv"
+    runaway = "x" * 4096
+    source.write_text(
+        "description,code,payer_name\n"
+        "Sepsis,871,Aetna\n"
+        "Joint replacement,470,Cigna\n"
+        f'"{runaway},291,Humana\n',
+        encoding="utf-8",
+    )
+    spec = FileSpec(path=source, kind="csv", encoding="utf-8-sig", delimiter=",", header_row=0)
+    with pytest.raises(ValueError) as caught:
+        list(iter_rows(spec))
+    message = str(caught.value)
+    assert "after 2 data rows" in message
+    assert "unbalanced quote" in message
+
+
+def test_bad_jsonl_line_is_reported_by_line_number(tmp_path: Path) -> None:
+    source = tmp_path / "broken.jsonl"
+    source.write_text(
+        json.dumps({"description": "Sepsis", "payer_name": "Aetna"}) + "\n"
+        + json.dumps({"description": "Joint", "payer_name": "Cigna"}) + "\n"
+        + "{not valid json\n",
+        encoding="utf-8",
+    )
+    spec = FileSpec(path=source, kind="jsonl")
+    with pytest.raises(ValueError, match="Line 3"):
+        list(iter_rows(spec))
+
+
+def test_expand_record_semantics_for_tricky_shapes() -> None:
+    """Pins the flattening rules the fast path must preserve."""
+    from mrf_filter.readers import expand_record
+
+    assert list(expand_record({})) == [{}]
+    assert list(expand_record({"a": None})) == [{"a": ""}]
+    assert list(expand_record({"a": True, "b": False})) == [{"a": "true", "b": "false"}]
+    assert list(expand_record({"a": []})) == [{"a": ""}]
+    assert list(expand_record({"a": [1, 2, 3]})) == [{"a": "1|2|3"}]
+
+    # Scalars on the parent repeat onto every exploded child row.
+    assert list(expand_record({"s": "top", "a": [{"x": 1}, {"x": 2}]})) == [
+        {"s": "top", "a.x": "1"},
+        {"s": "top", "a.x": "2"},
+    ]
+    # Siblings need not carry the same keys, and one sibling's key must not
+    # leak onto the next row.
+    assert list(expand_record({"a": [{"x": 1, "z": 5}, {"x": 2}]})) == [
+        {"a.x": "1", "a.z": "5"},
+        {"a.x": "2"},
+    ]
+    # Two array branches produce the cartesian product.
+    assert list(expand_record({"a": [{"x": 1}, {"x": 2}], "b": [{"y": 3}, {"y": 4}]})) == [
+        {"a.x": "1", "b.y": "3"},
+        {"a.x": "1", "b.y": "4"},
+        {"a.x": "2", "b.y": "3"},
+        {"a.x": "2", "b.y": "4"},
+    ]
+    # A CMS record: codes x payers, with the charge-level scalars on each row.
+    record = cms_json_record("Sepsis", "871", "MS-DRG",
+                             [payer("Aetna", "PPO", 1.0), payer("Cigna", "HMO", 2.0)])
+    record["code_information"].append({"code": "272", "type": "RC"})
+    rows = list(expand_record(record))
+    assert len(rows) == 4
+    assert {(row["code_information.code"], row["standard_charges.payers_information.payer_name"])
+            for row in rows} == {("871", "Aetna"), ("871", "Cigna"),
+                                 ("272", "Aetna"), ("272", "Cigna")}
+    assert all(row["description"] == "Sepsis" for row in rows)
+    assert all(row["standard_charges.gross_charge"] == "1000.0" for row in rows)
+
+
+def test_cache_is_keyed_by_the_distinct_value_limit(tmp_path: Path) -> None:
+    """A list collected under a smaller cap must not answer for a larger one."""
+    rows = [cms_row(f"Item {index}", str(index), "CPT", f"Payer {index}", "PPO", "100")
+            for index in range(40)]
+    source = write_cms_csv(tmp_path / "limits.csv", rows)
+    sample = sample_schema(source)
+    storage = AppStorage(tmp_path / "state")
+
+    small = scan_distinct(sample.spec, ["payer_name"], storage, limit=5)
+    assert len(small.values["payer_name"]) == 5 and small.truncated
+
+    large = scan_distinct(sample.spec, ["payer_name"], storage, limit=1000)
+    assert not large.from_cache, "the smaller cached list must not be reused"
+    assert len(large.values["payer_name"]) == 40 and not large.truncated
+
+    assert scan_distinct(sample.spec, ["payer_name"], storage, limit=1000).from_cache

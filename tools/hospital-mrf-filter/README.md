@@ -2,7 +2,7 @@
 
 A local Tkinter desktop application for streaming large CMS hospital price-transparency Machine-Readable Files and exporting a standardized, filtered CSV.
 
-Current version: **1.2.0**
+Current version: **1.3.0**
 
 ## What it does
 
@@ -10,7 +10,7 @@ Current version: **1.2.0**
 2. **Distinct-value scan:** streams the file once for every group of selected free-text fields, collecting only unique nonblank values. The scan computes the full SHA-256 at the same time.
 3. **Filter and export:** streams the file again and writes matching rows immediately to a temporary CSV, then atomically renames it when complete.
 
-The application never loads the complete input or complete output into memory. JSON input is parsed by `ijson` one detected record object at a time; nested object arrays are lazily exploded into logical rows. Measured against real files, peak resident memory stays under 45 MB for a 154 MB JSON MRF (692,000 logical rows) and for a 298 MB CSV MRF (977,000 rows). The app performs no network or scraping operations.
+The application never loads the complete input or complete output into memory, and nothing it holds grows with the number of rows. Measured end to end on a 9 GB, 50-million-row MRF, peak resident memory is 62 MB. See [Working at scale](#working-at-scale). The app performs no network or scraping operations.
 
 ## Supported input
 
@@ -47,7 +47,7 @@ On some Linux distributions, install the OS package for Tk first, usually `pytho
 2. Click **Sample schema**. For CSV files, confirm the proposed 1-based header row; the app shows six ranked candidates and permits a manual row override through record 250, and rows above the confirmed one are skipped as facility metadata in every later pass. For JSON and JSON Lines the app streams records to discover the field list, reporting progress; **Cancel** stops it.
 3. Review every mapping suggestion. Change wrong suggestions and use **(not mapped)** where appropriate. Nothing is accepted until **Confirm mapping** is clicked.
 4. Select one or more mapped free-text fields, then click **Scan selected fields**. All chosen fields are collected in one pass.
-5. In each value tab, search and select the values to keep. Leaving a tab unselected means that field is not used as a filter. Selections survive changing the search text.
+5. In each value tab, search and select the values to keep. Leaving a tab unselected means that field is not used as a filter. Selections survive changing the search text. Any value can also be typed in directly, which is how a column with too many distinct values to list is filtered.
 6. Optionally select MS-DRG codes from the bundled FY 2026 MS-DRG v43.0 list and apply them to `billing_code`. This never scans the MRF to build the code list.
 7. Choose an output path and run the export.
 
@@ -90,6 +90,35 @@ For plain and gzip input the SHA-256 is the file's own. A ZIP archive must be op
 - Selecting the input file itself as output is rejected.
 - The GUI does file work in a background thread and reports records processed, records matched, and byte progress.
 - An undecodable byte is replaced rather than raising. A 300 MB export carrying a handful of stray bytes finishes instead of aborting partway through, at the cost of one replacement character per bad byte.
+- A malformed CSV or JSON Lines file fails with the row or line number it failed on, not a bare parser error.
+
+## Working at scale
+
+Every pass is streaming, and the structures the app keeps are bounded rather than proportional to the file:
+
+- **Rows** are read, mapped and discarded one at a time. Both readers yield plain strings, and the CSV reader builds each row with `dict(zip(...))` in C.
+- **Distinct values** stop being collected at 250,000 per column (`DISTINCT_VALUE_LIMIT` in `mrf_filter/engine.py`). A hospital-system description column can hold millions, which is both a memory risk and useless as a pick list. The column is then marked partial in the UI and in the cache, and the values to keep are typed in instead.
+- **The value list widget** renders at most 5,000 rows at a time; the search box reaches the rest.
+- **CSV fields** are capped at 8 MiB (`CSV_MAX_FIELD_BYTES` in `mrf_filter/readers.py`). One unbalanced quote otherwise makes `csv.reader` accumulate a single field to end of file, which on a multi-gigabyte MRF is an out-of-memory kill rather than an error message.
+- **Schema discovery** on record-shaped JSON is bounded by the `SCHEMA_*` budgets, and stops as soon as the CMS core fields have been seen.
+
+Progress reports rows, percentage of file bytes, throughput and projected time remaining, and **Cancel** takes effect within a row, so a ten-minute pass is interruptible.
+
+Measured on this hardware (4 cores, ijson's `yajl2_c` backend), against generated CMS-format files of 50 million rows each:
+
+| Input | Schema | Distinct scan | Filter and export | Peak RSS |
+| --- | --- | --- | --- | --- |
+| 9.0 GB CSV, 50,000,000 rows | 0.4 s | 317 s (158k rows/s, 4 columns) | 419 s (119k rows/s, 4,166,667 rows written) | 62 MB |
+| 7.3 GB JSON Lines, 50,000,000 logical rows | 0.6 s | 591 s (85k rows/s, 2 columns) | 691 s (72k rows/s, 5,000,000 rows written) | 56 MB |
+
+Both exports were re-read afterwards and every row checked against the filter. Wall time is dominated by `csv.reader` and by JSON record expansion; on files this size, plan for minutes per pass rather than seconds.
+
+To recheck these numbers, build the same fixtures:
+
+```bash
+python scripts/make_scale_fixture.py csv   50000000 /tmp/scale.csv     # ~9.0 GB
+python scripts/make_scale_fixture.py jsonl  5000000 /tmp/scale.jsonl   # ~7.3 GB
+```
 
 ## Development and tests
 
@@ -119,5 +148,7 @@ Known limitations:
 - **The CMS "wide" CSV layout is not usefully filterable.** It gives each payer/plan pair its own set of columns rather than a `payer_name` column, so there is no single column to filter on. The mapper declines to match a leaf shared by more than two columns, which keeps it from arbitrarily picking one payer's column, but the tool cannot reshape such a file. Use the hospital's tall CSV or JSON file where one is published.
 - **A record-shaped JSON field that first appears very late in a huge file may be missed.** Field discovery stops once the CMS core fields have been seen plus a grace window, or at 250,000 records / 256 MiB, whichever comes first. The budgets are the `SCHEMA_*` constants in `mrf_filter/readers.py`.
 - **Only one billing code column is exported.** CMS files carry up to four (`code|1` … `code|4`); the mapper takes `code|1` and its type.
+- **A column with more than 250,000 distinct values is listed only partially.** The count reads `250,000+` and the tab says so; filter such a column by typing the values, or by filtering a different column instead.
+- **There is no resume.** A cancelled or failed export discards its partial file and starts over, which on a 50-million-row input means repeating a pass of several minutes.
 
 The bundled fixed-code reference was transcribed from the [CMS FY 2026 MS-DRG v43.0 Definitions Manual, Appendix A](https://www.cms.gov/icd10m/FY2026-fr-v43-fullcode-cms/fullcode_cms/P0392.html). It contains 772 active MS-DRG codes. Replace that small CSV resource when a different fiscal-year grouper is required.

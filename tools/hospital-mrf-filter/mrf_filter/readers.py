@@ -5,7 +5,6 @@ import gzip
 import hashlib
 import io
 import json
-import sys
 import zipfile
 from collections.abc import Iterator, Mapping
 from pathlib import Path
@@ -28,6 +27,12 @@ CSV_DELIMITERS = (",", "\t", "|", ";")
 # file can present a single "row" of tens of thousands of cells, so the number
 # of cells scored per candidate row is capped.
 HEADER_SCORE_MAX_CELLS = 60
+
+# One unbalanced quote makes csv.reader accumulate a single field until the next
+# quote or EOF. On a 9 GB MRF that is an out-of-memory kill; with a bound it is
+# a csv.Error naming the row, which the operator can act on. The largest field
+# seen in a real MRF is a few kilobytes of rate-algorithm prose.
+CSV_MAX_FIELD_BYTES = 8 * 1024 * 1024
 
 # Record-shaped JSON/JSONL has no declared header, so fields are discovered by
 # unioning keys across records. Hospitals commonly emit tens of thousands of
@@ -449,28 +454,50 @@ def _stringify(value: Any) -> str:
 
 
 def expand_record(value: Any, prefix: str = "") -> Iterator[dict[str, str]]:
-    """Lazily flatten mappings and explode arrays of objects into logical rows."""
+    """Lazily flatten mappings and explode arrays of objects into logical rows.
+
+    Scalar keys are collected up front and the recursive product runs over the
+    nested keys only. The levels that dominate a CMS file are all-scalar objects
+    (one code, one payer's rates), and taking them without building a generator
+    per key roughly triples throughput on the JSON path.
+    """
     if isinstance(value, Mapping):
-        items = list(value.items())
+        scalars: dict[str, str] = {}
+        branches: list[tuple[str, Any]] = []
+        for key, child in value.items():
+            child_prefix = f"{prefix}.{key}" if prefix else str(key)
+            if isinstance(child, (Mapping, list)):
+                branches.append((child_prefix, child))
+            else:
+                scalars[child_prefix] = _stringify(child)
+
+        if not branches:
+            yield scalars
+            return
+        if len(branches) == 1:
+            child_prefix, child = branches[0]
+            for fragment in expand_record(child, child_prefix):
+                row = dict(scalars)
+                row.update(fragment)
+                yield row
+            return
 
         def walk(index: int, current: dict[str, str]) -> Iterator[dict[str, str]]:
-            if index == len(items):
+            if index == len(branches):
                 yield dict(current)
                 return
-            key, child = items[index]
-            child_prefix = f"{prefix}.{key}" if prefix else str(key)
+            child_prefix, child = branches[index]
             for fragment in expand_record(child, child_prefix):
-                old = {name: current.get(name) for name in fragment}
-                missing = [name for name in fragment if name not in current]
+                # Sibling records in one array need not carry the same keys, so
+                # whatever this fragment overwrote is restored before the next.
+                restore = {name: current[name] for name in fragment if name in current}
                 current.update(fragment)
                 yield from walk(index + 1, current)
-                for name in missing:
+                for name in fragment:
                     current.pop(name, None)
-                for name, previous in old.items():
-                    if previous is not None:
-                        current[name] = previous
+                current.update(restore)
 
-        yield from walk(0, {})
+        yield from walk(0, dict(scalars))
     elif isinstance(value, list):
         if not value:
             yield {prefix: ""}
@@ -560,7 +587,7 @@ def sample_schema(
         spec = FileSpec(
             path=path, kind=kind, encoding=encoding, delimiter=delimiter, header_row=detected_header
         )
-        csv.field_size_limit(min(2**31 - 1, sys.maxsize))
+        csv.field_size_limit(CSV_MAX_FIELD_BYTES)
         reader = TrackedBinaryReader(path)
         try:
             with _buffered(reader) as binary:
@@ -598,12 +625,22 @@ def sample_schema(
     return SchemaSample(spec, headers, examples, [], records_scanned=records)
 
 
+def _csv_error_message(records: int, exc: csv.Error) -> str:
+    """Say where the parse failed; on a 50M-row file "csv.Error" alone is useless."""
+    limit = CSV_MAX_FIELD_BYTES // (1024 * 1024)
+    detail = str(exc)
+    if "field limit" in detail:
+        detail = (f"a single field ran past {limit} MiB, which normally means an unbalanced "
+                  "quote earlier in the file")
+    return f"Could not parse the CSV after {records:,} data rows: {detail}."
+
+
 def iter_rows(spec: FileSpec, tracker: TrackedBinaryReader | None = None) -> Iterator[dict[str, str]]:
     raw = tracker or TrackedBinaryReader(spec.path)
     owns_tracker = tracker is None
     try:
         if spec.kind == "csv":
-            csv.field_size_limit(min(2**31 - 1, sys.maxsize))
+            csv.field_size_limit(CSV_MAX_FIELD_BYTES)
             with _buffered(raw) as binary:
                 with io.TextIOWrapper(binary, encoding=spec.encoding, newline="", errors="replace") as text:
                     reader = csv.reader(text, delimiter=spec.delimiter)
@@ -613,18 +650,34 @@ def iter_rows(spec: FileSpec, tracker: TrackedBinaryReader | None = None) -> Ite
                     if raw_headers is None:
                         return
                     headers = _clean_headers(raw_headers)
-                    for values in reader:
-                        yield {
-                            header: _stringify(values[index]) if index < len(values) else ""
-                            for index, header in enumerate(headers)
-                        }
+                    width = len(headers)
+                    blanks = [""] * width
+                    records = 0
+                    # dict(zip(...)) runs entirely in C and is ~60% faster per
+                    # row than a per-cell comprehension. Over 50M rows that is
+                    # the difference between a 6-minute and a 10-minute pass.
+                    while True:
+                        try:
+                            values = next(reader)
+                        except StopIteration:
+                            break
+                        except csv.Error as exc:
+                            raise ValueError(_csv_error_message(records, exc)) from exc
+                        records += 1
+                        if len(values) != width:
+                            values = (values + blanks)[:width]
+                        yield dict(zip(headers, values))
         elif spec.kind == "jsonl":
             with _buffered(raw) as binary:
                 with io.TextIOWrapper(binary, encoding=spec.encoding, errors="replace") as text:
-                    for line in text:
+                    for number, line in enumerate(text, 1):
                         if line.strip():
-                            for row in expand_record(json.loads(line)):
-                                yield row
+                            try:
+                                record = json.loads(line)
+                            except json.JSONDecodeError as exc:
+                                raise ValueError(
+                                    f"Line {number:,} is not valid JSON: {exc}") from exc
+                            yield from expand_record(record)
         else:
             with _buffered(raw) as binary:
                 _skip_bom(binary)

@@ -78,21 +78,33 @@ class AppStorage:
     def _cache_path(self, digest: str, column: str) -> Path:
         return self.cache_dir / f"{digest}.{self._column_key(column)}.json.gz"
 
-    def load_distinct(self, digest: str, column: str) -> list[str] | None:
+    def load_distinct(self, digest: str, column: str) -> tuple[list[str], bool] | None:
+        """Return (values, truncated) for a cached column, or None if not cached."""
         path = self._cache_path(digest, column)
         try:
             with gzip.open(path, "rt", encoding="utf-8") as handle:
                 payload = json.load(handle)
             if payload.get("file_sha256") == digest and payload.get("column") == column:
-                return payload.get("values", [])
+                return payload.get("values", []), bool(payload.get("truncated"))
         except (FileNotFoundError, OSError, json.JSONDecodeError):
             pass
         return None
 
-    def save_distinct(self, digest: str, column: str, values: set[str]) -> None:
+    def save_distinct(self, digest: str, column: str, values: set[str],
+                      truncated: bool = False) -> None:
+        """Cache a column's distinct values, recording whether the list is partial.
+
+        A truncated list must never come back looking complete, or a later run
+        would filter against a silently partial set of values.
+        """
         path = self._cache_path(digest, column)
         temp = path.with_suffix(path.suffix + ".tmp")
-        payload = {"file_sha256": digest, "column": column, "values": sorted(values, key=str.casefold)}
+        payload = {
+            "file_sha256": digest,
+            "column": column,
+            "truncated": truncated,
+            "values": sorted(values, key=str.casefold),
+        }
         with gzip.open(temp, "wt", encoding="utf-8") as handle:
             json.dump(payload, handle, ensure_ascii=False)
         temp.replace(path)
