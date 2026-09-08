@@ -491,10 +491,14 @@ def test_gui_workflow_end_to_end(tmp_path: Path, monkeypatch) -> None:
 
         app._confirm_mapping()
         assert app.mapping["payer_name"] == "payer_name"
-        assert app.scan_fields.size() == len(app.mapping)
+        # Description is mapped and exported, but never offered as a filter,
+        # so the widget's rows are not the mapping's keys.
+        assert "description" in app.mapping
+        assert "description" not in app.scan_targets
+        assert app.scan_fields.size() == len(app.scan_targets) == len(app.mapping) - 1
 
-        targets = list(app.mapping)
-        app.scan_fields.selection_set(targets.index("payer_name"))
+        app.scan_fields.selection_set(app.scan_targets.index("payer_name"))
+        assert app._selected_scan_targets() == ["payer_name"]
         app._scan()
         assert pump(60, lambda: bool(app.selectors) and not app.busy)
 
@@ -695,3 +699,102 @@ def test_cache_is_keyed_by_the_distinct_value_limit(tmp_path: Path) -> None:
     assert len(large.values["payer_name"]) == 40 and not large.truncated
 
     assert scan_distinct(sample.spec, ["payer_name"], storage, limit=1000).from_cache
+
+
+def test_description_is_exported_but_never_offered_as_a_filter() -> None:
+    """A per-service description is near-unique per row; scanning it is wasted work."""
+    from mrf_filter.standards import TARGET_BY_NAME, TARGET_FIELDS
+
+    assert TARGET_BY_NAME["description"].filterable is False
+    unfilterable = {field.name for field in TARGET_FIELDS if not field.filterable}
+    assert unfilterable == {"description"}
+    # It stays a standard output column.
+    assert "description" in {field.name for field in TARGET_FIELDS}
+
+
+def test_scan_field_selection_survives_the_hidden_description_row(tmp_path: Path, monkeypatch) -> None:
+    """Widget rows are offset from the mapping, so the two must not be conflated."""
+    tkinter = pytest.importorskip("tkinter")
+    from mrf_filter import gui as gui_module
+
+    try:
+        probe = tkinter.Tk()
+    except tkinter.TclError as exc:
+        pytest.skip(f"Tk is unavailable: {exc}")
+    probe.destroy()
+
+    monkeypatch.setenv("MRF_FILTER_HOME", str(tmp_path / "home"))
+    monkeypatch.setattr(gui_module, "messagebox", type("D", (), {
+        "showerror": lambda self, t, m: (_ for _ in ()).throw(AssertionError(f"{t}: {m}")),
+        "showinfo": lambda self, t, m: None,
+        "askyesno": lambda self, t, m: True,
+    })())
+
+    source = write_cms_csv(tmp_path / "offsets.csv", [
+        cms_row("Sepsis", "871", "MS-DRG", "Aetna", "PPO", "12500")])
+    app = gui_module.MRFApp()
+    try:
+        app.file_var.set(str(source))
+        app.source_var.set("Offset Hospital")
+        app._sample()
+        deadline = time.monotonic() + 60
+        while time.monotonic() < deadline and (app.sample is None or app.busy):
+            app.update()
+            time.sleep(0.01)
+        app._confirm_mapping()
+
+        rows = [app.scan_fields.get(index) for index in range(app.scan_fields.size())]
+        assert not any("[description]" in row for row in rows)
+        for offset, target in enumerate(app.scan_targets):
+            assert f"[{target}]" in rows[offset]
+
+        # Selecting the last row must resolve to the last scannable target, not
+        # the mapping key that happens to sit at that index.
+        app.scan_fields.selection_set(len(app.scan_targets) - 1)
+        assert app._selected_scan_targets() == [app.scan_targets[-1]]
+    finally:
+        app.destroy()
+
+
+def test_scanning_with_only_unfilterable_fields_mapped_is_refused(tmp_path: Path, monkeypatch) -> None:
+    """Mapping description alone leaves nothing to scan; say that, not 'select a field'."""
+    tkinter = pytest.importorskip("tkinter")
+    from mrf_filter import gui as gui_module
+
+    try:
+        probe = tkinter.Tk()
+    except tkinter.TclError as exc:
+        pytest.skip(f"Tk is unavailable: {exc}")
+    probe.destroy()
+
+    monkeypatch.setenv("MRF_FILTER_HOME", str(tmp_path / "home"))
+    errors: list[tuple[str, str]] = []
+    monkeypatch.setattr(gui_module, "messagebox", type("D", (), {
+        "showerror": lambda self, title, message: errors.append((title, message)),
+        "showinfo": lambda self, title, message: None,
+        "askyesno": lambda self, title, message: True,
+    })())
+
+    source = write_cms_csv(tmp_path / "desc_only.csv", [
+        cms_row("Sepsis", "871", "MS-DRG", "Aetna", "PPO", "12500")])
+    app = gui_module.MRFApp()
+    try:
+        app.file_var.set(str(source))
+        app.source_var.set("Description Only")
+        app._sample()
+        deadline = time.monotonic() + 60
+        while time.monotonic() < deadline and (app.sample is None or app.busy):
+            app.update()
+            time.sleep(0.01)
+        for target, var in app.mapping_vars.items():
+            if target != "description":
+                var.set(gui_module.NOT_MAPPED)
+        app._confirm_mapping()
+        assert app.mapping == {"description": "description"}
+        assert app.scan_targets == [] and app.scan_fields.size() == 0
+
+        app._scan()
+        assert errors and errors[-1][0] == "Nothing to scan"
+        assert not app.busy
+    finally:
+        app.destroy()

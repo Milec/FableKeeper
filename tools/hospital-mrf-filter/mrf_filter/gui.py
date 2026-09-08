@@ -169,6 +169,7 @@ class MRFApp(tk.Tk):
         self.header_row_var = tk.StringVar(value="1")
         self.header_candidate_lookup: dict[str, int] = {}
         self.selectors: dict[str, ValueSelector] = {}
+        self.scan_targets: list[str] = []
         self.cancel_event = threading.Event()
         self.events: queue.Queue[tuple[str, object]] = queue.Queue()
         self.busy = False
@@ -289,8 +290,14 @@ class MRFApp(tk.Tk):
     def _build_filter_tab(self) -> None:
         top = ttk.Frame(self.filter_tab)
         top.pack(fill="x")
-        ttk.Label(top, text="Free-text fields to scan", font=("TkDefaultFont", 11, "bold")).pack(anchor="w")
-        ttk.Label(top, text="Select one or more mapped fields. They are scanned together in one streaming pass.", foreground="#555").pack(anchor="w")
+        ttk.Label(top, text="Fields to filter on", font=("TkDefaultFont", 11, "bold")).pack(anchor="w")
+        ttk.Label(
+            top,
+            text="Select one or more mapped fields. They are scanned together in one streaming pass.\n"
+                 "Description is not listed: it is close to unique per row, so it is exported but never scanned.",
+            foreground="#555",
+            justify="left",
+        ).pack(anchor="w")
         self.scan_fields = tk.Listbox(top, selectmode="extended", exportselection=False, height=6)
         self.scan_fields.pack(fill="x", pady=(8, 8))
         ttk.Button(top, text="Scan selected fields", command=self._scan).pack(anchor="w")
@@ -417,8 +424,9 @@ class MRFApp(tk.Tk):
         self.storage.save_mapping(self.source_var.get(), mapping)
         if self.sample.spec.kind == "csv":
             self.storage.save_header_row(self.source_var.get(), self.sample.spec.header_row)
+        self.scan_targets = [target for target in mapping if TARGET_BY_NAME[target].filterable]
         self.scan_fields.delete(0, "end")
-        for target in mapping:
+        for target in self.scan_targets:
             self.scan_fields.insert("end", f"{TARGET_BY_NAME[target].label}  [{target}]")
         drg_choices = [NOT_MAPPED] + [target for target in ("billing_code",) if target in mapping]
         self.drg_combo.configure(values=drg_choices)
@@ -427,16 +435,23 @@ class MRFApp(tk.Tk):
         self.status.set(f"Mapping confirmed: {len(mapping)} standardized fields.")
 
     def _selected_scan_targets(self) -> list[str]:
-        targets = list(self.mapping)
-        return [targets[index] for index in self.scan_fields.curselection()]
+        # Indexes the list the widget was filled from, which is not the mapping:
+        # unfilterable fields are mapped and exported but never listed here.
+        return [self.scan_targets[index] for index in self.scan_fields.curselection()]
 
     def _scan(self) -> None:
         if not self.sample or not self.mapping:
             messagebox.showerror("Mapping required", "Confirm the header mapping first.")
             return
+        if not self.scan_targets:
+            messagebox.showerror(
+                "Nothing to scan",
+                "None of the mapped fields can be used as a filter. Map a field such as "
+                "payer name, plan name or setting, then scan again.")
+            return
         targets = self._selected_scan_targets()
         if not targets:
-            messagebox.showerror("No fields selected", "Select at least one mapped free-text field to scan.")
+            messagebox.showerror("No fields selected", "Select at least one mapped field to scan.")
             return
         columns = [self.mapping[target] for target in targets]
         spec = self.sample.spec

@@ -46,7 +46,7 @@ On some Linux distributions, install the OS package for Tk first, usually `pytho
 1. Choose one local MRF and enter a stable source or hospital name.
 2. Click **Sample schema**. For CSV files, confirm the proposed 1-based header row; the app shows six ranked candidates and permits a manual row override through record 250, and rows above the confirmed one are skipped as facility metadata in every later pass. For JSON and JSON Lines the app streams records to discover the field list, reporting progress; **Cancel** stops it.
 3. Review every mapping suggestion. Change wrong suggestions and use **(not mapped)** where appropriate. Nothing is accepted until **Confirm mapping** is clicked.
-4. Select one or more mapped free-text fields, then click **Scan selected fields**. All chosen fields are collected in one pass.
+4. Select one or more mapped fields, then click **Scan selected fields**. All chosen fields are collected in one pass. Description is deliberately not offered: it is close to unique per row, so it is exported but never scanned.
 5. In each value tab, search and select the values to keep. Leaving a tab unselected means that field is not used as a filter. Selections survive changing the search text. Any value can also be typed in directly, which is how a column with too many distinct values to list is filtered.
 6. Optionally select MS-DRG codes from the bundled FY 2026 MS-DRG v43.0 list and apply them to `billing_code`. This never scans the MRF to build the code list.
 7. Choose an output path and run the export.
@@ -97,7 +97,8 @@ For plain and gzip input the SHA-256 is the file's own. A ZIP archive must be op
 Every pass is streaming, and the structures the app keeps are bounded rather than proportional to the file:
 
 - **Rows** are read, mapped and discarded one at a time. Both readers yield plain strings, and the CSV reader builds each row with `dict(zip(...))` in C.
-- **Distinct values** stop being collected at 250,000 per column (`DISTINCT_VALUE_LIMIT` in `mrf_filter/engine.py`). A hospital-system description column can hold millions, which is both a memory risk and useless as a pick list. The column is then marked partial in the UI and in the cache, and the values to keep are typed in instead.
+- **Description is never scanned.** A per-service description is close to unique per row, so enumerating it costs a large set and produces a pick list nobody can use. It is mapped and exported like any other field, but not offered as a filter column (`filterable=False` on its `TargetField`).
+- **Distinct values** stop being collected at 250,000 per column (`DISTINCT_VALUE_LIMIT` in `mrf_filter/engine.py`), for the columns that are offered. A billing code column on a multi-hospital file still runs to hundreds of thousands. Such a column is marked partial in the UI and in the cache, and the values to keep are typed in instead.
 - **The value list widget** renders at most 5,000 rows at a time; the search box reaches the rest.
 - **CSV fields** are capped at 8 MiB (`CSV_MAX_FIELD_BYTES` in `mrf_filter/readers.py`). One unbalanced quote otherwise makes `csv.reader` accumulate a single field to end of file, which on a multi-gigabyte MRF is an out-of-memory kill rather than an error message.
 - **Schema discovery** on record-shaped JSON is bounded by the `SCHEMA_*` budgets, and stops as soon as the CMS core fields have been seen.

@@ -12,6 +12,11 @@ class TargetField:
     name: str
     label: str
     aliases: tuple[str, ...]
+    # Whether the field is offered as a filter column. A per-service description
+    # is close to unique per row — millions of values on a system-wide file —
+    # and nobody picks a rate by matching its full description text, so scanning
+    # it only costs a pass and a large set.
+    filterable: bool = True
 
 
 # ``aliases`` leads with the canonical CMS column names for the v2.x/v3.0 CSV
@@ -19,7 +24,8 @@ class TargetField:
 # fuzzy matching is only ever a fallback for hospital-specific wording.
 TARGET_FIELDS = (
     TargetField("description", "Description", (
-        "description", "service description", "item description", "procedure description")),
+        "description", "service description", "item description", "procedure description"),
+        filterable=False),
     TargetField("setting", "Setting", (
         "setting", "patient setting", "inpatient outpatient")),
     TargetField("billing_class", "Billing class", (
