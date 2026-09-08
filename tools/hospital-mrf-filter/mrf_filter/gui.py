@@ -115,14 +115,27 @@ class MRFApp(tk.Tk):
         self.cancel_event = threading.Event()
         self.events: queue.Queue[tuple[str, object]] = queue.Queue()
         self.busy = False
+        self._drain_job: str | None = None
         self._build()
-        self.after(100, self._drain_events)
+        self._drain_job = self.after(100, self._drain_events)
 
     def _build(self) -> None:
         header = ttk.Frame(self, padding=(18, 14, 18, 6))
         header.pack(fill="x")
         ttk.Label(header, text="Hospital MRF Filter", font=("TkDefaultFont", 18, "bold")).pack(side="left")
         ttk.Label(header, text="Local, streaming rate-file extraction", foreground="#555").pack(side="left", padx=14)
+
+        # The footer claims its space before the notebook expands into what is
+        # left. Packed the other way round, a tall tab pushes the progress bar
+        # and status line off the bottom of the window.
+        footer = ttk.Frame(self, padding=(18, 4, 18, 14))
+        footer.pack(side="bottom", fill="x")
+        self.progress = ttk.Progressbar(footer, maximum=100)
+        self.progress.pack(fill="x")
+        self.status = tk.StringVar(value="Choose a local JSON, JSONL, CSV, TSV, or pipe-delimited MRF (.gz and .zip are read directly).")
+        ttk.Label(footer, textvariable=self.status).pack(side="left", pady=(5, 0))
+        self.cancel_button = ttk.Button(footer, text="Cancel", command=self._cancel, state="disabled")
+        self.cancel_button.pack(side="right", pady=(5, 0))
 
         self.notebook = ttk.Notebook(self)
         self.notebook.pack(fill="both", expand=True, padx=18, pady=8)
@@ -136,15 +149,6 @@ class MRFApp(tk.Tk):
         self._build_file_tab()
         self._build_filter_tab()
         self._build_export_tab()
-
-        footer = ttk.Frame(self, padding=(18, 4, 18, 14))
-        footer.pack(fill="x")
-        self.progress = ttk.Progressbar(footer, maximum=100)
-        self.progress.pack(fill="x")
-        self.status = tk.StringVar(value="Choose a local JSON, JSONL, CSV, TSV, or pipe-delimited MRF (.gz and .zip are read directly).")
-        ttk.Label(footer, textvariable=self.status).pack(side="left", pady=(5, 0))
-        self.cancel_button = ttk.Button(footer, text="Cancel", command=self._cancel, state="disabled")
-        self.cancel_button.pack(side="right", pady=(5, 0))
 
     def _build_file_tab(self) -> None:
         ttk.Label(self.file_tab, text="MRF file", font=("TkDefaultFont", 11, "bold")).grid(row=0, column=0, sticky="w")
@@ -233,11 +237,14 @@ class MRFApp(tk.Tk):
         self.scan_fields = tk.Listbox(top, selectmode="extended", exportselection=False, height=6)
         self.scan_fields.pack(fill="x", pady=(8, 8))
         ttk.Button(top, text="Scan selected fields", command=self._scan).pack(anchor="w")
-        self.value_notebook = ttk.Notebook(self.filter_tab)
-        self.value_notebook.pack(fill="both", expand=True, pady=(12, 8))
 
+        # Packed before the value notebook so the reference list keeps its own
+        # height; the notebook then expands into whatever is left.
         fixed = ttk.LabelFrame(self.filter_tab, text="Fixed reference filter: FY 2026 MS-DRG v43.0", padding=8)
-        fixed.pack(fill="x")
+        fixed.pack(side="bottom", fill="x", pady=(12, 0))
+        self.value_notebook = ttk.Notebook(self.filter_tab)
+        self.value_notebook.pack(fill="both", expand=True, pady=(12, 0))
+
         row = ttk.Frame(fixed)
         row.pack(fill="x")
         ttk.Label(row, text="Apply codes to:").pack(side="left")
@@ -491,7 +498,15 @@ class MRFApp(tk.Tk):
                         messagebox.showerror("MRF Filter", f"{type(payload).__name__}: {payload}")
         except queue.Empty:
             pass
-        self.after(100, self._drain_events)
+        self._drain_job = self.after(100, self._drain_events)
+
+    def destroy(self) -> None:
+        """Stop the event pump and any worker before the widgets go away."""
+        self.cancel_event.set()
+        if self._drain_job is not None:
+            self.after_cancel(self._drain_job)
+            self._drain_job = None
+        super().destroy()
 
     def _finish_busy(self) -> None:
         self.busy = False
