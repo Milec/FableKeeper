@@ -1,0 +1,2 @@
+ijson==3.4.0.post0
+rapidfuzz==3.14.1
