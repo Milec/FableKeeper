@@ -109,10 +109,10 @@ Measured on this hardware (4 cores, ijson's `yajl2_c` backend), against generate
 
 | Input | Schema | Distinct scan | Filter and export | Peak RSS |
 | --- | --- | --- | --- | --- |
-| 9.0 GB CSV, 50,000,000 rows | 0.4 s | 317 s (158k rows/s, 4 columns) | 419 s (119k rows/s, 4,166,667 rows written) | 62 MB |
-| 7.3 GB JSON Lines, 50,000,000 logical rows | 0.6 s | 591 s (85k rows/s, 2 columns) | 691 s (72k rows/s, 5,000,000 rows written) | 56 MB |
+| 8.5 GB CSV, 50,000,000 rows | 0.4 s | 324 s (155k rows/s) | 416 s (120k rows/s, 5,000,000 rows written) | 38 MB |
+| 7.4 GB JSON Lines, 50,000,000 logical rows | 0.6 s | 592 s (84k rows/s) | 677 s (74k rows/s, 5,000,000 rows written) | 37 MB |
 
-Both exports were re-read afterwards and every row checked against the filter. Wall time is dominated by `csv.reader` and by JSON record expansion; on files this size, plan for minutes per pass rather than seconds.
+Each scan covered payer name, plan name, setting and billing code, the last of which holds 89,999 distinct values. Both exports were re-read afterwards and every row checked against the filter, and against description being present on every row. Wall time is dominated by `csv.reader` and by JSON record expansion; on files this size, plan for minutes per pass rather than seconds.
 
 To recheck these numbers, build the same fixtures:
 
