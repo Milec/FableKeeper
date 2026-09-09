@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -204,6 +205,19 @@ def normalize_drg(value: object) -> str:
     return match.group(1).zfill(3) if match else text.upper()
 
 
+def package_root() -> Path:
+    """Where this package's bundled data files live.
+
+    PyInstaller unpacks ``datas`` under ``sys._MEIPASS`` rather than beside the
+    source, so a path derived from ``__file__`` finds nothing in a built app.
+    Both onefile and onedir builds set ``_MEIPASS``, so one branch covers them.
+    """
+    bundle = getattr(sys, "_MEIPASS", None)
+    if bundle:
+        return Path(bundle) / "mrf_filter"
+    return Path(__file__).resolve().parent
+
+
 def ms_drg_reference() -> list[str]:
-    path = Path(__file__).with_name("reference") / "ms_drg_codes_fy2026.csv"
+    path = package_root() / "reference" / "ms_drg_codes_fy2026.csv"
     return [code.strip() for code in path.read_text(encoding="ascii").replace("\n", ",").split(",") if code.strip()]

@@ -3,6 +3,8 @@ from __future__ import annotations
 import csv
 import gzip
 import json
+import subprocess
+import sys
 import threading
 import time
 import zipfile
@@ -798,3 +800,349 @@ def test_scanning_with_only_unfilterable_fields_mapped_is_refused(tmp_path: Path
         assert not app.busy
     finally:
         app.destroy()
+
+
+def test_reference_data_resolves_in_a_frozen_build(monkeypatch, tmp_path: Path) -> None:
+    """PyInstaller unpacks data under sys._MEIPASS, not beside the source."""
+    from mrf_filter import standards
+
+    assert standards.package_root() == Path(standards.__file__).resolve().parent
+    assert len(ms_drg_reference()) == 772
+
+    bundle = tmp_path / "meipass"
+    reference = bundle / "mrf_filter" / "reference"
+    reference.mkdir(parents=True)
+    (reference / "ms_drg_codes_fy2026.csv").write_text("001,002,003", encoding="ascii")
+    monkeypatch.setattr(sys, "_MEIPASS", str(bundle), raising=False)
+    assert standards.package_root() == bundle / "mrf_filter"
+    assert ms_drg_reference() == ["001", "002", "003"]
+
+
+def test_selftest_exercises_both_formats_and_reports_the_ijson_backend() -> None:
+    """What a built binary runs to prove it works on a machine without Python."""
+    import io
+
+    from mrf_filter.selftest import run
+
+    report = io.StringIO()
+    code = run(report)
+    text = report.getvalue()
+    assert code == 0, text
+    assert "yajl2_c" in text, "the C backend should be in use from source"
+    assert "772 codes" in text
+    assert "csv" in text and "json" in text
+    assert text.strip().endswith("OK")
+
+
+def test_command_line_entry_points() -> None:
+    """--version and --selftest must not need a display."""
+    entry = Path(__file__).resolve().parent.parent / "app.py"
+    for args, expected in ((["--version"], __import__("mrf_filter").__version__), (["--help"], "--selftest")):
+        result = subprocess.run([sys.executable, str(entry), *args],
+                                capture_output=True, text=True, timeout=120)
+        assert result.returncode == 0, result.stderr
+        assert expected in result.stdout
+
+    rejected = subprocess.run([sys.executable, str(entry), "--nope"],
+                              capture_output=True, text=True, timeout=120)
+    assert rejected.returncode == 2 and "Unrecognized argument" in rejected.stderr
+
+
+# The CMS v3.0.0 wide template, with two payer/plan blocks. Column spellings are
+# taken verbatim from the published template.
+WIDE_HEADER = (
+    "description,code|1,code|1|type,modifiers,setting,drug_unit_of_measurement,"
+    "drug_type_of_measurement,standard_charge|gross,standard_charge|discounted_cash,"
+    "standard_charge|Platform Health Insurance|PPO|negotiated_dollar,"
+    "standard_charge|Platform Health Insurance|PPO|negotiated_percentage,"
+    "standard_charge|Platform Health Insurance|PPO|negotiated_algorithm,"
+    "median_amount|Platform Health Insurance|PPO,10th_percentile|Platform Health Insurance|PPO,"
+    "90th_percentile|Platform Health Insurance|PPO,count|Platform Health Insurance|PPO,"
+    "standard_charge|Platform Health Insurance|PPO|methodology,"
+    "additional_payer_notes|Platform Health Insurance|PPO,"
+    "standard_charge|Region Health Insurance|HMO|negotiated_dollar,"
+    "standard_charge|Region Health Insurance|HMO|negotiated_percentage,"
+    "standard_charge|Region Health Insurance|HMO|negotiated_algorithm,"
+    "median_amount|Region Health Insurance|HMO,10th_percentile|Region Health Insurance|HMO,"
+    "90th_percentile|Region Health Insurance|HMO,count|Region Health Insurance|HMO,"
+    "standard_charge|Region Health Insurance|HMO|methodology,"
+    "additional_payer_notes|Region Health Insurance|HMO,"
+    "standard_charge|min,standard_charge|max,additional_generic_notes"
+)
+
+
+def write_wide_csv(path: Path, rows: list[str]) -> Path:
+    body = "\n".join([
+        "hospital_name,last_updated_on,version,location_name,hospital_address,license_number|CA",
+        'West Mercy Hospital,2026-04-01,3.0.0,West Mercy Hospital,"12 Main St, Fullerton, CA 92832",50056',
+        WIDE_HEADER,
+        *rows,
+    ])
+    path.write_text(body + "\n", encoding="utf-8")
+    return path
+
+
+def wide_row(description: str, code: str, code_type: str,
+             platform: str = "", region: str = "", notes: str = "") -> str:
+    """Build a wide row by column name; the block layout is too easy to miscount."""
+    values = {
+        "description": description,
+        "code|1": code,
+        "code|1|type": code_type,
+        "setting": "inpatient",
+        "standard_charge|gross": "1200",
+        "standard_charge|discounted_cash": "1080",
+        "standard_charge|min": "250",
+        "standard_charge|max": "400",
+    }
+    if platform:
+        values["standard_charge|Platform Health Insurance|PPO|negotiated_dollar"] = platform
+        values["standard_charge|Platform Health Insurance|PPO|methodology"] = "fee schedule"
+    if region:
+        values["standard_charge|Region Health Insurance|HMO|negotiated_dollar"] = region
+        values["standard_charge|Region Health Insurance|HMO|methodology"] = "fee schedule"
+        values["additional_payer_notes|Region Health Insurance|HMO"] = notes
+    columns = WIDE_HEADER.split(",")
+    unknown = set(values) - set(columns)
+    assert not unknown, f"the fixture names columns the header does not have: {unknown}"
+    return ",".join(values.get(column, "") for column in columns)
+
+
+def test_wide_columns_are_recognised_and_named() -> None:
+    from mrf_filter.wide import parse_payer_column
+
+    def parsed(header):
+        column = parse_payer_column(header)
+        return None if column is None else (column.payer, column.plan, column.tall_name)
+
+    assert parsed("standard_charge|Region Health Insurance|HMO|negotiated_dollar") == (
+        "Region Health Insurance", "HMO", "standard_charge|negotiated_dollar")
+    assert parsed("median_amount|Region Health Insurance|HMO") == (
+        "Region Health Insurance", "HMO", "median_amount")
+    # The published CMS tall example spaces its separators; both spellings occur.
+    assert parsed("standard_charge | Aetna | PPO | methodology") == (
+        "Aetna", "PPO", "standard_charge|methodology")
+
+    # Shared columns, including the three-part code columns that are not payer blocks.
+    for shared in ("description", "code|1", "code|1|type", "standard_charge|gross",
+                   "standard_charge|min", "additional_generic_notes"):
+        assert parsed(shared) is None
+
+
+def test_wide_csv_is_unpivoted_into_tall_rows(tmp_path: Path) -> None:
+    source = write_wide_csv(tmp_path / "wide.csv", [
+        wide_row("MRI of brain", "70551", "CPT", platform="400", region="250"),
+        wide_row("Inguinal hernia repair", "49505", "CPT", platform="8000", region="360",
+                 notes="Paid at 140% of the OPPS APC rate."),
+        # Only one payer prices this one; the empty block must not become a row.
+        wide_row("Psychoses", "885", "MS-DRG", platform="24000"),
+    ])
+    sample = sample_schema(source)
+    assert sample.spec.wide is True
+    assert sample.spec.header_row == 2
+    assert sample.payer_plans == 2
+    assert "payer_name" in sample.headers and "plan_name" in sample.headers
+    assert "standard_charge|negotiated_dollar" in sample.headers
+    assert not any("Platform Health Insurance" in header for header in sample.headers)
+
+    rows = list(iter_rows(sample.spec))
+    assert len(rows) == 5, "3 physical rows, 5 payer/plan combinations that carry a value"
+    assert [(row["description"], row["payer_name"], row["plan_name"]) for row in rows] == [
+        ("MRI of brain", "Platform Health Insurance", "PPO"),
+        ("MRI of brain", "Region Health Insurance", "HMO"),
+        ("Inguinal hernia repair", "Platform Health Insurance", "PPO"),
+        ("Inguinal hernia repair", "Region Health Insurance", "HMO"),
+        ("Psychoses", "Platform Health Insurance", "PPO"),
+    ]
+    # Shared columns repeat onto every row; payer columns land only on their own.
+    assert all(row["standard_charge|gross"] == "1200" for row in rows)
+    assert rows[0]["standard_charge|negotiated_dollar"] == "400"
+    assert rows[1]["standard_charge|negotiated_dollar"] == "250"
+    assert rows[3]["additional_payer_notes"] == "Paid at 140% of the OPPS APC rate."
+    assert rows[2].get("additional_payer_notes", "") == ""
+
+
+def test_wide_csv_maps_scans_and_exports_like_a_tall_one(tmp_path: Path) -> None:
+    """The point of unpivoting: nothing downstream needs a wide code path."""
+    source = write_wide_csv(tmp_path / "wide.csv", [
+        wide_row("MRI of brain", "70551", "CPT", platform="400", region="250"),
+        wide_row("Joint replacement", "470", "MS-DRG", platform="49000", region="14000"),
+    ])
+    sample = sample_schema(source)
+    mapping = {target: raw for target, (raw, _score) in suggest_mappings(sample.headers).items() if raw}
+    assert mapping["payer_name"] == "payer_name"
+    assert mapping["plan_name"] == "plan_name"
+    assert mapping["negotiated_dollar_amount"] == "standard_charge|negotiated_dollar"
+    assert mapping["billing_code"] == "code|1"
+
+    storage = AppStorage(tmp_path / "state")
+    scan = scan_distinct(sample.spec, [mapping["payer_name"]], storage)
+    assert scan.values["payer_name"] == ["Platform Health Insurance", "Region Health Insurance"]
+
+    output = tmp_path / "out.csv"
+    processed, matched = export_filtered(
+        sample.spec, output, mapping, {"payer_name": {"Region Health Insurance"}})
+    assert (processed, matched) == (4, 2)
+    with output.open(encoding="utf-8-sig", newline="") as handle:
+        rows = list(csv.DictReader(handle))
+    assert {row["negotiated_dollar_amount"] for row in rows} == {"250", "14000"}
+    assert all(row["payer_name"] == "Region Health Insurance" for row in rows)
+    assert all(row["gross_charge"] == "1200" for row in rows)
+
+    # The MS-DRG guard still applies after unpivoting.
+    drg_out = tmp_path / "drg.csv"
+    _processed, drg_matched = export_filtered(
+        sample.spec, drg_out, mapping, {"billing_code": {"470"}}, {"billing_code"},
+        drg_type_column=mapping["billing_code_type"])
+    assert drg_matched == 2
+
+
+def test_a_file_with_its_own_payer_column_is_never_unpivoted(tmp_path: Path) -> None:
+    """A tall file is authoritative about its payers even if a header looks wide."""
+    from mrf_filter.wide import detect_wide
+
+    assert detect_wide(["description", "payer_name", "plan_name",
+                        "standard_charge|Aetna|PPO|negotiated_dollar"]) is None
+    source = write_cms_csv(tmp_path / "tall.csv", [
+        cms_row("Sepsis", "871", "MS-DRG", "Aetna", "PPO", "12500")])
+    assert sample_schema(source).spec.wide is False
+
+
+def test_wide_and_tall_cache_entries_do_not_collide(tmp_path: Path) -> None:
+    from mrf_filter.engine import _cache_column_key
+
+    tall = FileSpec(path=tmp_path / "f.csv", kind="csv", wide=False)
+    wide = FileSpec(path=tmp_path / "f.csv", kind="csv", wide=True)
+    assert _cache_column_key(tall, "payer_name", "file", 10) != _cache_column_key(
+        wide, "payer_name", "file", 10)
+
+
+def test_wide_file_is_not_parsed_with_the_pipe_delimiter(tmp_path: Path) -> None:
+    """Wide column *names* are full of pipes, which fooled delimiter detection.
+
+    Splitting a comma-separated wide file on "|" yields a header row that scores
+    well, while every data row collapses to one field. With few payers that beat
+    the comma, and the file was read as nonsense.
+    """
+    from mrf_filter.readers import _delimiter_score, _parse_csv_window
+
+    source = write_wide_csv(tmp_path / "wide.csv", [
+        wide_row("MRI of brain", "70551", "CPT", platform="400", region="250"),
+        wide_row("Joint replacement", "470", "MS-DRG", platform="49000", region="14000"),
+    ])
+    text = source.read_text(encoding="utf-8")
+    comma = _delimiter_score(_parse_csv_window(text, ","))
+    pipe = _delimiter_score(_parse_csv_window(text, "|"))
+    assert comma > pipe, f"comma {comma} should beat pipe {pipe} on field-count agreement"
+
+    sample = sample_schema(source)
+    assert sample.spec.delimiter == ","
+    assert sample.spec.wide is True and sample.payer_plans == 2
+    assert "description" in sample.headers
+
+
+def test_hospital_columns_repeat_onto_every_unpivoted_row(tmp_path: Path) -> None:
+    """Some hospitals repeat their own details as leading columns on every row."""
+    lead = "hospital_name,location_name,license_number|CA"
+    header = f"{lead},{WIDE_HEADER}"
+    body = "\n".join([
+        "hospital_name,last_updated_on,version,location_name,hospital_address,license_number|CA",
+        'West Mercy Hospital,2026-04-01,3.0.0,West Mercy Hospital,"12 Main St, Fullerton, CA",50056',
+        header,
+        "West Mercy Hospital,Main Campus,50056," + wide_row(
+            "MRI of brain", "70551", "CPT", platform="400", region="250"),
+    ])
+    source = tmp_path / "wide_lead.csv"
+    source.write_text(body + "\n", encoding="utf-8")
+
+    sample = sample_schema(source)
+    assert sample.spec.delimiter == "," and sample.spec.wide is True
+    assert sample.spec.header_row == 2
+    # A hospital column is not a payer block, so it stays shared.
+    assert sample.headers[:3] == ["hospital_name", "location_name", "license_number|CA"]
+
+    rows = list(iter_rows(sample.spec))
+    assert len(rows) == 2
+    for row in rows:
+        assert row["hospital_name"] == "West Mercy Hospital"
+        assert row["location_name"] == "Main Campus"
+        assert row["license_number|CA"] == "50056"
+    assert [row["payer_name"] for row in rows] == [
+        "Platform Health Insurance", "Region Health Insurance"]
+
+
+def test_wide_file_without_a_metadata_preamble(tmp_path: Path) -> None:
+    """Not every hospital emits the two metadata rows; the header can be row 1."""
+    source = tmp_path / "no_preamble.csv"
+    source.write_text("\n".join([
+        WIDE_HEADER,
+        wide_row("MRI of brain", "70551", "CPT", platform="400", region="250"),
+    ]) + "\n", encoding="utf-8")
+
+    sample = sample_schema(source)
+    assert sample.spec.header_row == 0
+    assert sample.spec.wide is True and sample.payer_plans == 2
+    rows = list(iter_rows(sample.spec))
+    assert [(row["payer_name"], row["standard_charge|negotiated_dollar"]) for row in rows] == [
+        ("Platform Health Insurance", "400"), ("Region Health Insurance", "250")]
+
+
+def test_many_payer_blocks_still_find_the_header_row(tmp_path: Path) -> None:
+    """A hospital with sixty payers publishes a header row of several hundred columns."""
+    payers = [(f"Payer {n:02d} Health Plan", f"Plan {n % 4}") for n in range(60)]
+    blocks = [f"standard_charge|{p}|{pl}|negotiated_dollar" for p, pl in payers]
+    blocks += [f"standard_charge|{p}|{pl}|methodology" for p, pl in payers]
+    header = ",".join(["description", "code|1", "code|1|type", "setting",
+                       "standard_charge|gross"] + blocks + ["standard_charge|min"])
+    values = ["Service A", "70551", "CPT", "outpatient", "1200"]
+    values += [str(300 + n) for n in range(60)] + ["fee schedule"] * 60 + ["250"]
+    source = tmp_path / "many.csv"
+    source.write_text("\n".join([
+        "hospital_name,last_updated_on,version",
+        "West Mercy Hospital,2026-04-01,3.0.0",
+        header,
+        ",".join(values),
+    ]) + "\n", encoding="utf-8")
+
+    sample = sample_schema(source)
+    assert sample.spec.delimiter == "," and sample.spec.header_row == 2
+    assert sample.payer_plans == 60
+    rows = list(iter_rows(sample.spec))
+    assert len(rows) == 60
+    assert rows[0]["standard_charge|gross"] == "1200"
+    assert {row["payer_name"] for row in rows} == {p for p, _plan in payers}
+
+
+def test_an_html_error_page_is_rejected_by_name(tmp_path: Path) -> None:
+    """A failed download saves the error page under the MRF's name."""
+    for markup in ('<!DOCTYPE html><html><head><title>403</title></head><body>Denied</body></html>',
+                   '<html lang="en"><body>Sign in to continue</body></html>',
+                   '<?xml version="1.0"?><Error><Code>AccessDenied</Code></Error>'):
+        source = tmp_path / "standardcharges.json"
+        source.write_text(markup, encoding="utf-8")
+        with pytest.raises(ValueError, match="web page, not a machine-readable file"):
+            sample_schema(source)
+
+    # A BOM in front of the markup is just as common.
+    source = tmp_path / "bom.csv"
+    source.write_bytes(b"\xef\xbb\xbf<!DOCTYPE html>\n<html><body>Not found</body></html>")
+    with pytest.raises(ValueError, match="web page"):
+        sample_schema(source)
+
+    # A real MRF whose first description happens to contain a bracket still reads.
+    fine = write_cms_csv(tmp_path / "fine.csv", [
+        cms_row("Repair <2.5cm laceration", "12011", "CPT", "Aetna", "PPO", "300")])
+    assert sample_schema(fine).spec.kind == "csv"
+
+
+def test_selftest_covers_the_wide_layout() -> None:
+    """The shipped binary's own check has to exercise every format it claims."""
+    import io
+
+    from mrf_filter.selftest import run
+
+    report = io.StringIO()
+    assert run(report) == 0, report.getvalue()
+    text = report.getvalue()
+    for expected in ("tall csv", "wide csv", "json", "yajl2_c", "772 codes"):
+        assert expected in text, f"{expected!r} missing from:\n{text}"

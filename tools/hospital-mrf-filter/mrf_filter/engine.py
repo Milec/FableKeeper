@@ -32,7 +32,7 @@ def _cache_column_key(spec: FileSpec, column: str, digest_scope: str, limit: int
     """
     parser_signature = (
         f"kind={spec.kind}|header={spec.header_row}|delimiter={spec.delimiter}|"
-        f"json_prefix={spec.json_prefix or ''}|scope={digest_scope}|limit={limit}"
+        f"json_prefix={spec.json_prefix or ''}|wide={spec.wide}|scope={digest_scope}|limit={limit}"
     )
     return f"{parser_signature}|column={column}"
 

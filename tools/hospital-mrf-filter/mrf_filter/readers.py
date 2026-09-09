@@ -15,6 +15,7 @@ from rapidfuzz import fuzz
 
 from .model import CancelledError, FileSpec, Progress, ProgressCallback, SchemaSample
 from .standards import TARGET_FIELDS, normalize_header
+from .wide import detect_wide
 
 
 SAMPLE_LIMIT = 8 * 1024 * 1024
@@ -56,6 +57,11 @@ HEADER_ALIASES = tuple(
     for field in TARGET_FIELDS
     for alias in (field.name, field.label, *field.aliases)
 )
+
+# A failed download is very often an HTML error page saved under the MRF's
+# name. Read as a CSV it yields a couple of nonsense columns and a header row
+# somewhere in the markup, which tells the operator nothing.
+HTML_MARKERS = (b"<!doctype html", b"<html", b"<?xml", b"<!--")
 
 GZIP_MAGIC = b"\x1f\x8b"
 ZIP_MAGIC = b"PK\x03\x04"
@@ -234,15 +240,22 @@ def container_suffix(path: Path) -> str:
 
 
 def detect_kind(path: Path) -> str:
+    head = read_head(path, 4096)
+    if head.startswith(UTF8_BOM):
+        head = head[len(UTF8_BOM) :]
+    stripped = head.lstrip()
+    if stripped[:64].lower().startswith(HTML_MARKERS):
+        raise ValueError(
+            f"{path.name} is a web page, not a machine-readable file. A download that "
+            "failed or needed a login usually saves the error page under the file's name; "
+            "open the URL in a browser and check what comes back."
+        )
     suffix = container_suffix(path)
     if suffix in {".csv", ".txt", ".tsv", ".psv"}:
         return "csv"
     if suffix in {".jsonl", ".ndjson"}:
         return "jsonl"
-    head = read_head(path, 4096)
-    if head.startswith(UTF8_BOM):
-        head = head[len(UTF8_BOM) :]
-    if head.lstrip().startswith((b"{", b"[")):
+    if stripped.startswith((b"{", b"[")):
         return "json"
     return "csv"
 
@@ -320,13 +333,40 @@ def _header_preview(row: list[str]) -> str:
     return text[:180]
 
 
+def _delimiter_score(rows: list[list[str]]) -> float:
+    """How stable the field count is under this delimiter.
+
+    The delimiter and the header row are two separate questions, and answering
+    the first by how header-like a row looks gets the wide CMS layout wrong: its
+    column *names* are full of pipes ("standard_charge|Aetna|PPO|methodology"),
+    so splitting a comma-separated wide file on "|" produces a header row that
+    scores well while every data row collapses to a single field. Field-count
+    agreement across rows is what actually identifies a delimiter, and it is
+    weighted by the width so that a delimiter which finds no fields at all
+    cannot win by being consistently useless.
+    """
+    widths = [len(row) for row in rows if any(cell for cell in row)]
+    if not widths:
+        return 0.0
+    counts: dict[int, int] = {}
+    for width in widths:
+        counts[width] = counts.get(width, 0) + 1
+    modal = max(counts, key=lambda width: (counts[width], width))
+    if modal < 2:
+        return 0.0
+    return counts[modal] / len(widths) * min(modal, 60)
+
+
 def _detect_csv(path: Path, header_row_override: int | None = None) -> tuple[str, str, int, list[tuple[int, str, int]]]:
     encoding, text = _read_csv_window(path)
+    parsed = [(delimiter, _parse_csv_window(text, delimiter)) for delimiter in CSV_DELIMITERS]
+    ranked_delimiters = sorted(
+        ((_delimiter_score(rows), -CSV_DELIMITERS.index(delimiter), delimiter, rows)
+         for delimiter, rows in parsed if rows),
+        reverse=True,
+    )
     best: tuple[int, str, int, list[list[str]], dict[int, int]] | None = None
-    for delimiter in CSV_DELIMITERS:
-        rows = _parse_csv_window(text, delimiter)
-        if not rows:
-            continue
+    for _score, _order, delimiter, rows in ranked_delimiters:
         if header_row_override is not None:
             if not 0 <= header_row_override < len(rows):
                 continue
@@ -335,8 +375,8 @@ def _detect_csv(path: Path, header_row_override: int | None = None) -> tuple[str
             indices = list(range(min(len(rows), CSV_HEADER_SCAN_RECORDS)))
         scores = {index: _header_score(rows, index) for index in indices}
         top = max(scores, key=lambda index: (scores[index], -index))
-        if best is None or scores[top] > best[0]:
-            best = (scores[top], delimiter, top, rows, scores)
+        best = (scores[top], delimiter, top, rows, scores)
+        break
     if best is None:
         if header_row_override is not None:
             raise ValueError(
@@ -584,9 +624,6 @@ def sample_schema(
     kind = detect_kind(path)
     if kind == "csv":
         encoding, delimiter, detected_header, candidates = _detect_csv(path, header_row)
-        spec = FileSpec(
-            path=path, kind=kind, encoding=encoding, delimiter=delimiter, header_row=detected_header
-        )
         csv.field_size_limit(CSV_MAX_FIELD_BYTES)
         reader = TrackedBinaryReader(path)
         try:
@@ -599,13 +636,21 @@ def sample_schema(
                     if not raw_headers:
                         raise ValueError("The file does not contain a CSV header row.")
                     headers = _clean_headers(raw_headers)
-                    examples = [
-                        dict(zip(headers, row))
-                        for row, _ in zip(rows, range(SCHEMA_EXAMPLE_ROWS))
-                    ]
+                    layout = detect_wide(headers)
+                    sample_rows = [row for row, _ in zip(rows, range(SCHEMA_EXAMPLE_ROWS))]
         finally:
             if not reader.closed:
                 reader.close()
+        spec = FileSpec(
+            path=path, kind=kind, encoding=encoding, delimiter=delimiter,
+            header_row=detected_header, wide=layout is not None,
+        )
+        if layout is not None:
+            # The mapper, the scan and the export all see the tall shape.
+            examples = [row for values in sample_rows for row in layout.expand(values)]
+            return SchemaSample(spec, list(layout.tall_headers), examples[:SCHEMA_EXAMPLE_ROWS],
+                                candidates, payer_plans=layout.payer_plans)
+        examples = [dict(zip(headers, values)) for values in sample_rows]
         return SchemaSample(spec, headers, examples, candidates)
 
     if kind == "json" and _looks_like_jsonl(path):
@@ -653,6 +698,9 @@ def iter_rows(spec: FileSpec, tracker: TrackedBinaryReader | None = None) -> Ite
                     width = len(headers)
                     blanks = [""] * width
                     records = 0
+                    # Rebuilt per pass rather than carried on the spec, which
+                    # stays a small hashable value used in cache keys.
+                    layout = detect_wide(headers) if spec.wide else None
                     # dict(zip(...)) runs entirely in C and is ~60% faster per
                     # row than a per-cell comprehension. Over 50M rows that is
                     # the difference between a 6-minute and a 10-minute pass.
@@ -666,7 +714,10 @@ def iter_rows(spec: FileSpec, tracker: TrackedBinaryReader | None = None) -> Ite
                         records += 1
                         if len(values) != width:
                             values = (values + blanks)[:width]
-                        yield dict(zip(headers, values))
+                        if layout is None:
+                            yield dict(zip(headers, values))
+                        else:
+                            yield from layout.expand(values)
         elif spec.kind == "jsonl":
             with _buffered(raw) as binary:
                 with io.TextIOWrapper(binary, encoding=spec.encoding, errors="replace") as text:

@@ -17,6 +17,9 @@ class FileSpec:
     delimiter: str = ","
     json_prefix: str | None = None
     header_row: int = 0
+    # CMS publishes CSVs in a tall layout and a wide one that gives every
+    # payer/plan its own columns. Wide files are unpivoted while reading.
+    wide: bool = False
 
 
 @dataclass
@@ -26,6 +29,7 @@ class SchemaSample:
     examples: list[dict[str, str]] = field(default_factory=list)
     header_candidates: list[tuple[int, str, int]] = field(default_factory=list)
     records_scanned: int = 0
+    payer_plans: int = 0
 
 
 @dataclass(frozen=True)
