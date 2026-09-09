@@ -64,9 +64,9 @@ def main() -> int:
         if not produced.is_file():
             print(f"build reported success but {produced} is missing", file=sys.stderr)
             return 1
-        print(f"built {produced} ({produced.stat().st_size / (1024 * 1024):.0f} MB)")
+        print(f"built {produced} ({produced.stat().st_size / (1024 * 1024):.0f} MB)", flush=True)
 
-    print(f"\nrunning {diagnostic.name} --selftest:\n")
+    print(f"\nrunning {diagnostic.name} --selftest:\n", flush=True)
     check = subprocess.run([str(diagnostic), "--selftest"])
     if check.returncode != 0:
         print("\nthe built application failed its own self-test", file=sys.stderr)
@@ -78,7 +78,8 @@ def main() -> int:
         if silent.returncode != 0:
             print(f"\n{binary.name} failed its self-test (exit {silent.returncode})", file=sys.stderr)
             return silent.returncode
-        print(f"{binary.name} passed the same self-test silently, as a windowed build does.")
+        print(f"{binary.name} passed the same self-test silently, as a windowed build does.",
+              flush=True)
 
     print(f"\n{binary} is ready to hand out; it needs no Python installed.")
     return 0
