@@ -1111,3 +1111,38 @@ def test_many_payer_blocks_still_find_the_header_row(tmp_path: Path) -> None:
     assert len(rows) == 60
     assert rows[0]["standard_charge|gross"] == "1200"
     assert {row["payer_name"] for row in rows} == {p for p, _plan in payers}
+
+
+def test_an_html_error_page_is_rejected_by_name(tmp_path: Path) -> None:
+    """A failed download saves the error page under the MRF's name."""
+    for markup in ('<!DOCTYPE html><html><head><title>403</title></head><body>Denied</body></html>',
+                   '<html lang="en"><body>Sign in to continue</body></html>',
+                   '<?xml version="1.0"?><Error><Code>AccessDenied</Code></Error>'):
+        source = tmp_path / "standardcharges.json"
+        source.write_text(markup, encoding="utf-8")
+        with pytest.raises(ValueError, match="web page, not a machine-readable file"):
+            sample_schema(source)
+
+    # A BOM in front of the markup is just as common.
+    source = tmp_path / "bom.csv"
+    source.write_bytes(b"\xef\xbb\xbf<!DOCTYPE html>\n<html><body>Not found</body></html>")
+    with pytest.raises(ValueError, match="web page"):
+        sample_schema(source)
+
+    # A real MRF whose first description happens to contain a bracket still reads.
+    fine = write_cms_csv(tmp_path / "fine.csv", [
+        cms_row("Repair <2.5cm laceration", "12011", "CPT", "Aetna", "PPO", "300")])
+    assert sample_schema(fine).spec.kind == "csv"
+
+
+def test_selftest_covers_the_wide_layout() -> None:
+    """The shipped binary's own check has to exercise every format it claims."""
+    import io
+
+    from mrf_filter.selftest import run
+
+    report = io.StringIO()
+    assert run(report) == 0, report.getvalue()
+    text = report.getvalue()
+    for expected in ("tall csv", "wide csv", "json", "yajl2_c", "772 codes"):
+        assert expected in text, f"{expected!r} missing from:\n{text}"

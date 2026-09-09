@@ -53,7 +53,7 @@ HospitalMRFFilter --selftest              # macOS, Linux
 HospitalMRFFilter-console.exe --selftest  # Windows
 ```
 
-That runs the whole pipeline over a small generated MRF in both CSV and JSON form and prints what it found: the ijson backend in use, the Tk version, and the size of the bundled MS-DRG list. It exits non-zero if anything is missing.
+That runs the whole pipeline over a small generated MRF in tall CSV, wide CSV and BOM-prefixed JSON form and prints what it found: the ijson backend in use, the Tk version, and the size of the bundled MS-DRG list. It exits non-zero if anything is missing.
 
 The Windows download carries two executables from the same build. `HospitalMRFFilter.exe` is the application; `HospitalMRFFilter-console.exe` is the same program built against the console subsystem, because a windowed Windows executable has no stdout and so prints nothing at all.
 
@@ -107,6 +107,7 @@ For plain and gzip input the SHA-256 is the file's own. A ZIP archive must be op
 - The GUI does file work in a background thread and reports records processed, records matched, and byte progress.
 - An undecodable byte is replaced rather than raising. A 300 MB export carrying a handful of stray bytes finishes instead of aborting partway through, at the cost of one replacement character per bad byte.
 - A malformed CSV or JSON Lines file fails with the row or line number it failed on, not a bare parser error.
+- A file that is really an HTML page is named as one. A download that failed or needed a login saves the error page under the MRF's name, and read as a CSV that yields a couple of nonsense columns rather than an explanation.
 
 ## Working at scale
 

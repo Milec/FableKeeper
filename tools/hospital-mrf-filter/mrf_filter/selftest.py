@@ -25,6 +25,16 @@ CMS_TALL_HEADER = (
     "standard_charge|discounted_cash,payer_name,plan_name,"
     "standard_charge|negotiated_dollar,standard_charge|methodology,billing_class"
 )
+
+# The same services in the CMS wide layout, which the reader unpivots. Column
+# names here are pipe-heavy on purpose: they are what made delimiter detection
+# pick "|" over "," on a comma-separated file.
+CMS_WIDE_HEADER = (
+    "description,code|1,code|1|type,setting,standard_charge|gross,"
+    "standard_charge|discounted_cash,"
+    "standard_charge|Aetna|PPO|negotiated_dollar,standard_charge|Aetna|PPO|methodology,"
+    "standard_charge|Cigna|HMO|negotiated_dollar,standard_charge|Cigna|HMO|methodology"
+)
 CSV_ROWS = [
     ("Septicemia", "871", "MS-DRG", "Aetna", "PPO", "12500"),
     ("Septicemia", "871", "MS-DRG", "Cigna", "HMO", "11800"),
@@ -42,6 +52,26 @@ def _write_csv(path: Path) -> None:
     for description, code, code_type, payer, plan, dollar in CSV_ROWS:
         lines.append(f"{description},{code},{code_type},inpatient,30000.00,24000.00,"
                      f"{payer},{plan},{dollar},fee schedule,facility")
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def _write_wide_csv(path: Path) -> None:
+    """One line per service, one column block per payer."""
+    lines = [
+        "hospital_name,last_updated_on,version,location_name",
+        "Self Test Health,2026-01-01,3.0.0,Self Test Hospital",
+        CMS_WIDE_HEADER,
+    ]
+    by_service: dict[tuple[str, str, str], dict[str, str]] = {}
+    for description, code, code_type, payer, _plan, dollar in CSV_ROWS:
+        by_service.setdefault((description, code, code_type), {})[payer] = dollar
+    for (description, code, code_type), payers in by_service.items():
+        aetna, cigna = payers.get("Aetna", ""), payers.get("Cigna", "")
+        lines.append(
+            f"{description},{code},{code_type},inpatient,30000.00,24000.00,"
+            f"{aetna},{'fee schedule' if aetna else ''},"
+            f"{cigna},{'fee schedule' if cigna else ''}"
+        )
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
@@ -72,11 +102,15 @@ def _write_json(path: Path) -> None:
     path.write_bytes(b"\xef\xbb\xbf" + json.dumps(payload).encode("utf-8"))
 
 
-def _check_pipeline(source: Path, storage: AppStorage, expect_kind: str) -> list[str]:
+def _check_pipeline(source: Path, storage: AppStorage, expect_kind: str,
+                    expect_wide: bool = False) -> list[str]:
     problems: list[str] = []
     sample = sample_schema(source)
     if sample.spec.kind != expect_kind:
         problems.append(f"{source.name}: detected as {sample.spec.kind}, expected {expect_kind}")
+    if expect_wide and not sample.spec.wide:
+        problems.append(f"{source.name}: the wide layout was not recognised, so it was read "
+                        f"with delimiter {sample.spec.delimiter!r} and has no payer column")
     mapping = {target: raw for target, (raw, _score) in suggest_mappings(sample.headers).items() if raw}
     for required in ("description", "payer_name", "billing_code", "billing_code_type",
                      "negotiated_dollar_amount"):
@@ -142,11 +176,17 @@ def run(stream=None) -> int:
         root = Path(temp)
         storage = AppStorage(root / "state")
         _write_csv(root / "rates.csv")
+        _write_wide_csv(root / "wide.csv")
         _write_json(root / "rates.json")
-        for source, kind in ((root / "rates.csv", "csv"), (root / "rates.json", "json")):
+        checks = (
+            ("tall csv", root / "rates.csv", "csv", False),
+            ("wide csv", root / "wide.csv", "csv", True),
+            ("json", root / "rates.json", "json", False),
+        )
+        for label, source, kind, wide in checks:
             try:
-                problems.extend(_check_pipeline(source, storage, kind))
-                print(f"  {kind:16s} sampled, scanned, filtered and exported", file=out)
+                problems.extend(_check_pipeline(source, storage, kind, wide))
+                print(f"  {label:16s} sampled, scanned, filtered and exported", file=out)
             except Exception as exc:
                 problems.append(f"{source.name}: {type(exc).__name__}: {exc}")
 

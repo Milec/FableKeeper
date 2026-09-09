@@ -58,6 +58,11 @@ HEADER_ALIASES = tuple(
     for alias in (field.name, field.label, *field.aliases)
 )
 
+# A failed download is very often an HTML error page saved under the MRF's
+# name. Read as a CSV it yields a couple of nonsense columns and a header row
+# somewhere in the markup, which tells the operator nothing.
+HTML_MARKERS = (b"<!doctype html", b"<html", b"<?xml", b"<!--")
+
 GZIP_MAGIC = b"\x1f\x8b"
 ZIP_MAGIC = b"PK\x03\x04"
 UTF8_BOM = b"\xef\xbb\xbf"
@@ -235,15 +240,22 @@ def container_suffix(path: Path) -> str:
 
 
 def detect_kind(path: Path) -> str:
+    head = read_head(path, 4096)
+    if head.startswith(UTF8_BOM):
+        head = head[len(UTF8_BOM) :]
+    stripped = head.lstrip()
+    if stripped[:64].lower().startswith(HTML_MARKERS):
+        raise ValueError(
+            f"{path.name} is a web page, not a machine-readable file. A download that "
+            "failed or needed a login usually saves the error page under the file's name; "
+            "open the URL in a browser and check what comes back."
+        )
     suffix = container_suffix(path)
     if suffix in {".csv", ".txt", ".tsv", ".psv"}:
         return "csv"
     if suffix in {".jsonl", ".ndjson"}:
         return "jsonl"
-    head = read_head(path, 4096)
-    if head.startswith(UTF8_BOM):
-        head = head[len(UTF8_BOM) :]
-    if head.lstrip().startswith((b"{", b"[")):
+    if stripped.startswith((b"{", b"[")):
         return "json"
     return "csv"
 
