@@ -46,14 +46,39 @@ exe = EXE(
     strip=False,
     upx=False,
     runtime_tmpdir=None,
-    # Windowed: no console flashes up behind the GUI. Run the binary from a
-    # terminal with --selftest to see diagnostics.
+    # Windowed, so no console flashes up behind the GUI.
     console=False,
     disable_windowed_traceback=False,
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
 )
+
+if sys.platform == "win32":
+    # A windowed Windows executable has no stdout at all, so `--selftest` on the
+    # GUI binary prints nothing: it sets an exit code and stays silent. This
+    # console-subsystem twin shares the same entry point and payload, and is
+    # what the docs point at for diagnostics. It costs a second copy of the
+    # bundle on disk; attaching to the parent console with ctypes instead is one
+    # binary but breaks output redirection.
+    console_exe = EXE(
+        pyz,
+        a.scripts,
+        a.binaries,
+        a.datas,
+        [],
+        name=f"{app_name}-console",
+        debug=False,
+        bootloader_ignore_signals=False,
+        strip=False,
+        upx=False,
+        runtime_tmpdir=None,
+        console=True,
+        disable_windowed_traceback=False,
+        target_arch=None,
+        codesign_identity=None,
+        entitlements_file=None,
+    )
 
 if sys.platform == "darwin":
     app = BUNDLE(

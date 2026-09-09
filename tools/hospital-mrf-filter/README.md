@@ -35,10 +35,13 @@ Download the build for your platform from the latest run of the **Hospital MRF F
 To check a download before trusting it with a real file:
 
 ```
-HospitalMRFFilter --selftest
+HospitalMRFFilter --selftest              # macOS, Linux
+HospitalMRFFilter-console.exe --selftest  # Windows
 ```
 
 That runs the whole pipeline over a small generated MRF in both CSV and JSON form and prints what it found: the ijson backend in use, the Tk version, and the size of the bundled MS-DRG list. It exits non-zero if anything is missing.
+
+The Windows download carries two executables from the same build. `HospitalMRFFilter.exe` is the application; `HospitalMRFFilter-console.exe` is the same program built against the console subsystem, because a windowed Windows executable has no stdout and so prints nothing at all.
 
 ## Workflow
 

@@ -25,7 +25,19 @@ NAME = "HospitalMRFFilter"
 
 
 def built_binary() -> Path:
+    """The application people launch."""
     return ROOT / "dist" / (f"{NAME}.exe" if sys.platform == "win32" else NAME)
+
+
+def diagnostic_binary() -> Path:
+    """The one whose output is visible.
+
+    On Windows the GUI executable is windowed and has no stdout, so it can set
+    an exit code but cannot print a report; the console twin does both.
+    """
+    if sys.platform == "win32":
+        return ROOT / "dist" / f"{NAME}-console.exe"
+    return built_binary()
 
 
 def main() -> int:
@@ -47,18 +59,27 @@ def main() -> int:
     if build.returncode != 0:
         return build.returncode
 
-    binary = built_binary()
-    if not binary.is_file():
-        print(f"build reported success but {binary} is missing", file=sys.stderr)
-        return 1
-    size = binary.stat().st_size / (1024 * 1024)
-    print(f"\nbuilt {binary} ({size:.0f} MB)\n")
+    binary, diagnostic = built_binary(), diagnostic_binary()
+    for produced in {binary, diagnostic}:
+        if not produced.is_file():
+            print(f"build reported success but {produced} is missing", file=sys.stderr)
+            return 1
+        print(f"built {produced} ({produced.stat().st_size / (1024 * 1024):.0f} MB)")
 
-    print("running the built application's self-test:\n")
-    check = subprocess.run([str(binary), "--selftest"])
+    print(f"\nrunning {diagnostic.name} --selftest:\n")
+    check = subprocess.run([str(diagnostic), "--selftest"])
     if check.returncode != 0:
         print("\nthe built application failed its own self-test", file=sys.stderr)
         return check.returncode
+
+    if diagnostic != binary:
+        # The GUI binary cannot report, but it can still pass or fail.
+        silent = subprocess.run([str(binary), "--selftest"])
+        if silent.returncode != 0:
+            print(f"\n{binary.name} failed its self-test (exit {silent.returncode})", file=sys.stderr)
+            return silent.returncode
+        print(f"{binary.name} passed the same self-test silently, as a windowed build does.")
+
     print(f"\n{binary} is ready to hand out; it needs no Python installed.")
     return 0
 

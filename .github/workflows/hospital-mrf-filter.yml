@@ -72,6 +72,7 @@ jobs:
           path: |
             tools/hospital-mrf-filter/dist/HospitalMRFFilter
             tools/hospital-mrf-filter/dist/HospitalMRFFilter.exe
+            tools/hospital-mrf-filter/dist/HospitalMRFFilter-console.exe
             tools/hospital-mrf-filter/dist/HospitalMRFFilter-app.zip
           if-no-files-found: error
           retention-days: 30
