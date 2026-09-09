@@ -551,6 +551,9 @@ class MRFApp(tk.Tk):
                     self.notebook.select(self.map_tab)
                     if self.sample.spec.kind == "csv":
                         detail = f"; header row: {self.sample.spec.header_row + 1}"
+                        if self.sample.spec.wide:
+                            detail += (f"; wide layout, unpivoted into "
+                                       f"{self.sample.payer_plans:,} payer/plan combinations")
                     else:
                         detail = f"; {self.sample.records_scanned:,} records scanned"
                     self.status.set(

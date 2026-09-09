@@ -15,6 +15,7 @@ from rapidfuzz import fuzz
 
 from .model import CancelledError, FileSpec, Progress, ProgressCallback, SchemaSample
 from .standards import TARGET_FIELDS, normalize_header
+from .wide import detect_wide
 
 
 SAMPLE_LIMIT = 8 * 1024 * 1024
@@ -584,9 +585,6 @@ def sample_schema(
     kind = detect_kind(path)
     if kind == "csv":
         encoding, delimiter, detected_header, candidates = _detect_csv(path, header_row)
-        spec = FileSpec(
-            path=path, kind=kind, encoding=encoding, delimiter=delimiter, header_row=detected_header
-        )
         csv.field_size_limit(CSV_MAX_FIELD_BYTES)
         reader = TrackedBinaryReader(path)
         try:
@@ -599,13 +597,21 @@ def sample_schema(
                     if not raw_headers:
                         raise ValueError("The file does not contain a CSV header row.")
                     headers = _clean_headers(raw_headers)
-                    examples = [
-                        dict(zip(headers, row))
-                        for row, _ in zip(rows, range(SCHEMA_EXAMPLE_ROWS))
-                    ]
+                    layout = detect_wide(headers)
+                    sample_rows = [row for row, _ in zip(rows, range(SCHEMA_EXAMPLE_ROWS))]
         finally:
             if not reader.closed:
                 reader.close()
+        spec = FileSpec(
+            path=path, kind=kind, encoding=encoding, delimiter=delimiter,
+            header_row=detected_header, wide=layout is not None,
+        )
+        if layout is not None:
+            # The mapper, the scan and the export all see the tall shape.
+            examples = [row for values in sample_rows for row in layout.expand(values)]
+            return SchemaSample(spec, list(layout.tall_headers), examples[:SCHEMA_EXAMPLE_ROWS],
+                                candidates, payer_plans=layout.payer_plans)
+        examples = [dict(zip(headers, values)) for values in sample_rows]
         return SchemaSample(spec, headers, examples, candidates)
 
     if kind == "json" and _looks_like_jsonl(path):
@@ -653,6 +659,9 @@ def iter_rows(spec: FileSpec, tracker: TrackedBinaryReader | None = None) -> Ite
                     width = len(headers)
                     blanks = [""] * width
                     records = 0
+                    # Rebuilt per pass rather than carried on the spec, which
+                    # stays a small hashable value used in cache keys.
+                    layout = detect_wide(headers) if spec.wide else None
                     # dict(zip(...)) runs entirely in C and is ~60% faster per
                     # row than a per-cell comprehension. Over 50M rows that is
                     # the difference between a 6-minute and a 10-minute pass.
@@ -666,7 +675,10 @@ def iter_rows(spec: FileSpec, tracker: TrackedBinaryReader | None = None) -> Ite
                         records += 1
                         if len(values) != width:
                             values = (values + blanks)[:width]
-                        yield dict(zip(headers, values))
+                        if layout is None:
+                            yield dict(zip(headers, values))
+                        else:
+                            yield from layout.expand(values)
         elif spec.kind == "jsonl":
             with _buffered(raw) as binary:
                 with io.TextIOWrapper(binary, encoding=spec.encoding, errors="replace") as text:

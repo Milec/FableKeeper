@@ -2,7 +2,7 @@
 
 A local Tkinter desktop application for streaming large CMS hospital price-transparency Machine-Readable Files and exporting a standardized, filtered CSV.
 
-Current version: **1.4.0**
+Current version: **1.5.0**
 
 ## What it does
 
@@ -14,13 +14,27 @@ The application never loads the complete input or complete output into memory, a
 
 ## Supported input
 
-- CSV, TSV, pipe-delimited, and semicolon-delimited text
+- CSV, TSV, pipe-delimited, and semicolon-delimited text, in both the CMS "tall" and "wide" layouts
 - JSON Lines / NDJSON
 - JSON containing an array of objects
 - CMS-style JSON with a `standard_charge_information` array and nested charge arrays
 - Any of the above inside a `.gz` file, or as the largest data entry of a `.zip` archive
 
 Containers are recognized by magic bytes rather than file extension, so a `.csv` that is really gzip is still read correctly. A UTF-8 BOM, which many hospital exports carry, is handled on every path.
+
+### The CMS wide layout
+
+The tall layout gives every payer/plan its own row. The wide layout gives every payer/plan its own *columns* and one row per item, so there is no `payer_name` column to filter on:
+
+```
+standard_charge|Region Health Insurance|HMO|negotiated_dollar
+standard_charge|Region Health Insurance|HMO|methodology
+median_amount|Region Health Insurance|HMO
+```
+
+Wide files are recognised from those column names and unpivoted while reading: one row per payer/plan that actually carries a value, with the block's columns renamed to their tall equivalents and `payer_name` and `plan_name` filled in. Everything after that (the mapper, the distinct-value scan, the filters, the export) sees a tall file, so a wide file maps and filters exactly like any other. Payer/plan blocks with no value on a row are skipped rather than emitted empty, which matters when a hospital publishes sixty payers and fills three.
+
+Checked against the published CMS v3.0.0 tall and wide examples, which encode the same 25 services: unpivoting the wide file reproduces all 44 service/payer/plan rows of the tall file, and every one of the eight standardized rate fields agrees on all 44.
 
 For generic JSON, the app detects a likely object-array path within the first 8 MiB. Extremely unusual JSON with no record array in that window should first be converted to JSON Lines.
 
@@ -99,6 +113,7 @@ For plain and gzip input the SHA-256 is the file's own. A ZIP archive must be op
 Every pass is streaming, and the structures the app keeps are bounded rather than proportional to the file:
 
 - **Rows** are read, mapped and discarded one at a time. Both readers yield plain strings, and the CSV reader builds each row with `dict(zip(...))` in C.
+- **A wide file's logical row count is its payer/plan combinations, not its lines.** Unpivoting multiplies rows by the number of payers priced on each line, so a wide file reports more records processed than it has lines. Nothing is held in memory across rows.
 - **Description is never scanned.** A per-service description is close to unique per row, so enumerating it costs a large set and produces a pick list nobody can use. It is mapped and exported like any other field, but not offered as a filter column (`filterable=False` on its `TargetField`).
 - **Distinct values** stop being collected at 250,000 per column (`DISTINCT_VALUE_LIMIT` in `mrf_filter/engine.py`), for the columns that are offered. A billing code column on a multi-hospital file still runs to hundreds of thousands. Such a column is marked partial in the UI and in the cache, and the values to keep are typed in instead.
 - **The value list widget** renders at most 5,000 rows at a time; the search box reaches the rest.
@@ -167,7 +182,6 @@ This tool intentionally has no downloader, scraper, database, multi-hospital agg
 
 Known limitations:
 
-- **The CMS "wide" CSV layout is not usefully filterable.** It gives each payer/plan pair its own set of columns rather than a `payer_name` column, so there is no single column to filter on. The mapper declines to match a leaf shared by more than two columns, which keeps it from arbitrarily picking one payer's column, but the tool cannot reshape such a file. Use the hospital's tall CSV or JSON file where one is published.
 - **A record-shaped JSON field that first appears very late in a huge file may be missed.** Field discovery stops once the CMS core fields have been seen plus a grace window, or at 250,000 records / 256 MiB, whichever comes first. The budgets are the `SCHEMA_*` constants in `mrf_filter/readers.py`.
 - **Only one billing code column is exported.** CMS files carry up to four (`code|1` … `code|4`); the mapper takes `code|1` and its type.
 - **A column with more than 250,000 distinct values is listed only partially.** The count reads `250,000+` and the tab says so; filter such a column by typing the values, or by filtering a different column instead.
