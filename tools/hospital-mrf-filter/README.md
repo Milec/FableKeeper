@@ -2,7 +2,7 @@
 
 A local Tkinter desktop application for streaming large CMS hospital price-transparency Machine-Readable Files and exporting a standardized, filtered CSV.
 
-Current version: **1.5.0**
+Current version: **1.6.0**
 
 ## What it does
 
@@ -61,7 +61,7 @@ The Windows download carries two executables from the same build. `HospitalMRFFi
 
 1. Choose one local MRF and enter a stable source or hospital name.
 2. Click **Sample schema**. For CSV files, confirm the proposed 1-based header row; the app shows six ranked candidates and permits a manual row override through record 250, and rows above the confirmed one are skipped as facility metadata in every later pass. For JSON and JSON Lines the app streams records to discover the field list, reporting progress; **Cancel** stops it.
-3. Review every mapping suggestion. Change wrong suggestions and use **(not mapped)** where appropriate. Nothing is accepted until **Confirm mapping** is clicked.
+3. Review every mapping suggestion against the **Data preview** underneath it. Change wrong suggestions and use **(not mapped)** where appropriate. Nothing is accepted until **Confirm mapping** is clicked.
 4. Select one or more mapped fields, then click **Scan selected fields**. All chosen fields are collected in one pass. Description is deliberately not offered: it is close to unique per row, so it is exported but never scanned.
 5. In each value tab, search and select the values to keep. Leaving a tab unselected means that field is not used as a filter. Selections survive changing the search text. Any value can also be typed in directly, which is how a column with too many distinct values to list is filtered.
 6. Optionally select MS-DRG codes from the bundled FY 2026 MS-DRG v43.0 list and apply them to `billing_code`. This never scans the MRF to build the code list.
@@ -81,6 +81,17 @@ Beyond that:
 - **Weak matches are left unmapped.** Below a blended score of 78 the app offers nothing rather than a confident guess, on the view that a wrong mapping silently corrupts the export while a blank one is visible. Fill those in from the dropdown.
 
 Against the real CMS files tested below, 18 to 19 of the 21 standard fields map exactly and the rest are genuinely absent from those files.
+
+## The data preview
+
+A column name alone does not settle whether a mapping is right, so the header mapping tab shows the file's own data underneath the suggestions, in whichever of two orientations suits the layout. **Show** collapses the panel and hands the space back to the field list.
+
+- **First 10 rows** is the default for tall CSV, JSON and JSON Lines. It shows ten rows exactly as the scan and the export will read them, so a code column that is empty for the first few hundred rows is visible before the export runs rather than after.
+- **First 10 columns** is the default for the wide layout, and turns the same data on its side: one line per published column, with the values from the first rows beside it. A wide file gives every payer/plan its own column block, so a single row can be a thousand cells long and only the column list is legible. The tested wide file publishes 209 columns that unpivot to 16.
+
+The two views deliberately show different things on a wide file. The rows are the unpivoted ones the rest of the application sees, led by payer name and plan name because one physical row becomes one row per payer and everything else on them repeats. The columns are what the hospital actually published, elided in the middle so that both the payer and the metric stay readable.
+
+Both views are available for every format. The preview reads only the rows already held from schema sampling, so it costs no extra pass and no measurable memory: peak resident memory across the sixteen real files below is unchanged at 48 MB.
 
 ## MS-DRG codes and revenue codes
 

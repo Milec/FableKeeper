@@ -10,12 +10,22 @@ from tkinter import filedialog, messagebox, ttk
 
 from .engine import DISTINCT_VALUE_LIMIT, export_filtered, scan_distinct
 from .model import CancelledError, Progress, ScanResult, SchemaSample
-from .readers import sample_schema
+from .readers import PREVIEW_COLUMNS, PREVIEW_ROWS, sample_schema
 from .standards import TARGET_BY_NAME, TARGET_FIELDS, ms_drg_reference, suggest_mappings
 from .storage import AppStorage
+from .wide import PAYER_NAME, PLAN_NAME
 
 
 NOT_MAPPED = "(not mapped)"
+
+# A description or an algorithm note runs past any sane column width. The
+# preview is for recognising a column, not for reading its contents.
+PREVIEW_CELL_CHARS = 40
+PREVIEW_VALUE_COLUMNS = 3
+
+# Column names are the point of the sideways view, so they get more room than a
+# value cell: a wide name carries the payer, the plan and the metric.
+PREVIEW_NAME_CHARS = 62
 
 # A hospital-wide description column can hold hundreds of thousands of distinct
 # values. Rendering them all freezes the list widget, so the view is capped and
@@ -29,6 +39,28 @@ def format_duration(seconds: float) -> str:
     if seconds < 5400:
         return f"{seconds / 60:.0f}m"
     return f"{seconds / 3600:.1f}h"
+
+
+def _preview_cell(value: str) -> str:
+    """One cell as a single short line: newlines and tabs wreck a Treeview row."""
+    text = " ".join(str(value).split())
+    return text if len(text) <= PREVIEW_CELL_CHARS else text[:PREVIEW_CELL_CHARS - 1] + "\u2026"
+
+
+def _preview_middle(text: str, limit: int) -> str:
+    """Elide the middle, not the tail.
+
+    A wide column is named standard_charge|<payer>|<plan>|<metric>: cutting the
+    end leaves three columns that all read the same.
+    """
+    if len(text) <= limit:
+        return text
+    head = (limit - 1) * 5 // 9
+    return text[:head] + "\u2026" + text[-(limit - 1 - head):]
+
+
+def _preview_width(characters: int, cap: int = 340) -> int:
+    return min(max(characters, 8) * 8 + 20, cap)
 
 
 class ValueSelector(ttk.Frame):
@@ -160,7 +192,7 @@ class MRFApp(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
         self.title("Hospital MRF Filter")
-        self.geometry("1120x820")
+        self.geometry("1120x900")
         self.minsize(940, 680)
         self.storage = AppStorage()
         self.sample: SchemaSample | None = None
@@ -168,6 +200,9 @@ class MRFApp(tk.Tk):
         self.mapping_vars: dict[str, tk.StringVar] = {}
         self.header_row_var = tk.StringVar(value="1")
         self.header_candidate_lookup: dict[str, int] = {}
+        self.preview_mode = tk.StringVar(value="rows")
+        self.preview_visible = tk.BooleanVar(value=True)
+        self.preview_buttons: list[ttk.Radiobutton] = []
         self.selectors: dict[str, ValueSelector] = {}
         self.scan_targets: list[str] = []
         self.cancel_event = threading.Event()
@@ -257,6 +292,11 @@ class MRFApp(tk.Tk):
                 candidate_box.grid(row=1, column=1, columnspan=3, sticky="ew", padx=(8, 0), pady=(8, 0))
                 candidate_box.bind("<<ComboboxSelected>>", self._choose_header_candidate)
             header_box.columnconfigure(3, weight=1)
+        # Packed before the mapping list so the list expands into what is left:
+        # the other way round, a long field list pushes the preview off-screen.
+        ttk.Button(self.map_tab, text="Confirm mapping", command=self._confirm_mapping).pack(
+            side="bottom", anchor="e", padx=6, pady=(10, 0))
+        self._build_preview()
         outer = ttk.Frame(self.map_tab)
         outer.pack(fill="both", expand=True)
         canvas = tk.Canvas(outer, highlightthickness=0)
@@ -285,7 +325,121 @@ class MRFApp(tk.Tk):
             match_text = "saved" if field.name in saved else (f"{score}%" if suggestion else "")
             ttk.Label(rows, text=match_text, foreground="#555").grid(row=index, column=2, sticky="w", padx=8)
         rows.columnconfigure(1, weight=1)
-        ttk.Button(self.map_tab, text="Confirm mapping", command=self._confirm_mapping).pack(anchor="e", padx=6, pady=(10, 0))
+
+    def _build_preview(self) -> None:
+        """Show real data next to the mapping, so a wrong column is obvious.
+
+        Two orientations, because the two CMS CSV layouts fail differently. A
+        tall file is read down: ten rows show what each column holds. A wide file
+        gives every payer its own column block, so a single row can be a thousand
+        cells long and only the column list is legible.
+        """
+        if self.sample is None:
+            return
+        box = ttk.LabelFrame(self.map_tab, text="Data preview", padding=8)
+        box.pack(side="bottom", fill="x", padx=6, pady=(10, 0))
+        controls = ttk.Frame(box)
+        controls.pack(fill="x")
+        ttk.Checkbutton(controls, text="Show", variable=self.preview_visible,
+                        command=self._toggle_preview).pack(side="left", padx=(0, 14))
+        self.preview_buttons = [
+            ttk.Radiobutton(controls, text=f"First {PREVIEW_ROWS} rows", value="rows",
+                            variable=self.preview_mode, command=self._refresh_preview),
+            ttk.Radiobutton(controls, text=f"First {PREVIEW_COLUMNS} columns", value="columns",
+                            variable=self.preview_mode, command=self._refresh_preview),
+        ]
+        for button in self.preview_buttons:
+            button.pack(side="left", padx=(0, 12))
+        self.preview_note = ttk.Label(box, foreground="#555", wraplength=1020, justify="left")
+        self.preview_host = ttk.Frame(box)
+        self._toggle_preview()
+
+    def _toggle_preview(self) -> None:
+        """Collapse the panel to its controls; the mapping list takes the space."""
+        host = getattr(self, "preview_host", None)
+        if host is None or not host.winfo_exists():
+            return
+        state = "normal" if self.preview_visible.get() else "disabled"
+        for button in self.preview_buttons:
+            button.configure(state=state)
+        if not self.preview_visible.get():
+            host.pack_forget()
+            self.preview_note.pack_forget()
+            return
+        self.preview_note.pack(fill="x", anchor="w", pady=(4, 0))
+        host.pack(fill="both", expand=True, pady=(8, 0))
+        self._refresh_preview()
+
+    def _refresh_preview(self) -> None:
+        host = getattr(self, "preview_host", None)
+        if host is None or self.sample is None or not host.winfo_exists():
+            return
+        if not self.preview_visible.get():
+            return
+        for child in host.winfo_children():
+            child.destroy()
+        if self.preview_mode.get() == "columns":
+            columns, rows, note = self._preview_by_column()
+        else:
+            columns, rows, note = self._preview_by_row()
+        self.preview_note.configure(text=note)
+        tree = ttk.Treeview(host, columns=[f"c{index}" for index in range(len(columns))],
+                            show="headings", height=min(PREVIEW_ROWS, max(len(rows), 1)),
+                            selectmode="none")
+        for index, (title, width) in enumerate(columns):
+            tree.heading(f"c{index}", text=title)
+            tree.column(f"c{index}", width=width, minwidth=60, stretch=False, anchor="w")
+        for values in rows:
+            tree.insert("", "end", values=values)
+        horizontal = ttk.Scrollbar(host, orient="horizontal", command=tree.xview)
+        tree.configure(xscrollcommand=horizontal.set)
+        tree.pack(fill="both", expand=True)
+        horizontal.pack(fill="x")
+
+    def _preview_by_row(self) -> tuple[list[tuple[str, int]], list[list[str]], str]:
+        """Ten rows as the rest of the application will read them."""
+        sample = self.sample
+        headers = sample.headers
+        if sample.spec.wide:
+            # One wide row becomes one row per payer, so ten preview rows can all
+            # be the same service. Lead with the columns that differ.
+            lead = [name for name in (PAYER_NAME, PLAN_NAME) if name in headers]
+            headers = lead + [name for name in headers if name not in lead]
+        rows = [[_preview_cell(row.get(name, "")) for name in headers] for row in sample.examples]
+        widths = [
+            _preview_width(max([len(name)] + [len(row[index]) for row in rows], default=len(name)))
+            for index, name in enumerate(headers)
+        ]
+        note = f"{len(rows)} of the rows the tool will read"
+        if sample.spec.wide:
+            note += f", after unpivoting {sample.payer_plans:,} payer/plan column blocks into rows"
+        elif sample.spec.kind != "csv":
+            note += f", flattened from {len(headers)} discovered fields"
+        return list(zip(headers, widths)), rows, note
+
+    def _preview_by_column(self) -> tuple[list[tuple[str, int]], list[list[str]], str]:
+        """The file's own columns, one per line, with the values under each."""
+        sample = self.sample
+        names = sample.raw_headers[:PREVIEW_COLUMNS]
+        depth = min(PREVIEW_VALUE_COLUMNS, len(sample.raw_examples))
+        rows = []
+        for index, name in enumerate(names):
+            values = [
+                _preview_cell(record[index] if index < len(record) else "")
+                for record in sample.raw_examples[:depth]
+            ]
+            rows.append([name, *values])
+        rows = [[_preview_middle(row[0], PREVIEW_NAME_CHARS), *row[1:]] for row in rows]
+        name_width = _preview_width(
+            max([len(row[0]) for row in rows], default=20), cap=PREVIEW_NAME_CHARS * 8 + 20)
+        columns = [("Column in the file", max(name_width, 220))]
+        columns += [(f"Row {number}", 200) for number in range(1, depth + 1)]
+        total = len(sample.raw_headers)
+        note = f"{len(names)} of {total:,} columns published in the file"
+        if sample.spec.wide:
+            note += (f" — wide layout: the payer blocks become {sample.payer_plans:,} rows, "
+                     "which is why the fields below include payer name and plan name")
+        return columns, rows, note
 
     def _build_filter_tab(self) -> None:
         top = ttk.Frame(self.filter_tab)
@@ -547,6 +701,8 @@ class MRFApp(tk.Tk):
                 elif event == "sample_done":
                     self.sample = payload
                     self._finish_busy()
+                    # A wide file's rows are unreadable across; start it sideways.
+                    self.preview_mode.set("columns" if payload.spec.wide else "rows")
                     self._build_mapping_tab()
                     self.notebook.select(self.map_tab)
                     if self.sample.spec.kind == "csv":
