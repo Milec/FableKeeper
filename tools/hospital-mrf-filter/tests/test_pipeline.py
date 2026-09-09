@@ -1146,3 +1146,183 @@ def test_selftest_covers_the_wide_layout() -> None:
     text = report.getvalue()
     for expected in ("tall csv", "wide csv", "json", "yajl2_c", "772 codes"):
         assert expected in text, f"{expected!r} missing from:\n{text}"
+
+
+def test_preview_keeps_ten_rows_and_the_files_own_columns(tmp_path: Path) -> None:
+    """The mapping tab shows real data, so the sample must carry it."""
+    source = write_cms_csv(tmp_path / "preview.csv", [
+        cms_row(f"Service {index}", str(300 + index), "MS-DRG", "Aetna", "PPO", str(1000 + index))
+        for index in range(25)
+    ])
+    sample = sample_schema(source)
+
+    assert len(sample.examples) == 10, "ten rows, not the whole file"
+    assert [row["description"] for row in sample.examples] == [
+        f"Service {index}" for index in range(10)]
+    # A tall file is its own raw shape: the two views describe the same columns.
+    assert sample.raw_headers == sample.headers
+    assert len(sample.raw_examples) == 10
+    assert all(len(values) == len(sample.raw_headers) for values in sample.raw_examples)
+    assert sample.raw_examples[0][0] == "Service 0"
+    assert sample.raw_examples[0][sample.raw_headers.index("code|1")] == "300"
+
+
+def test_preview_of_a_wide_file_keeps_both_shapes(tmp_path: Path) -> None:
+    """A wide row is hundreds of cells long, so its columns are the readable view."""
+    source = write_wide_csv(tmp_path / "wide.csv", [
+        wide_row("MRI of brain", "70551", "CPT", platform="400", region="250"),
+        wide_row("Joint replacement", "470", "MS-DRG", platform="49000", region="14000"),
+    ])
+    sample = sample_schema(source)
+    assert sample.spec.wide is True
+
+    # Rows are the unpivoted ones the mapper, the scan and the export all see.
+    assert [(row["description"], row["payer_name"]) for row in sample.examples] == [
+        ("MRI of brain", "Platform Health Insurance"),
+        ("MRI of brain", "Region Health Insurance"),
+        ("Joint replacement", "Platform Health Insurance"),
+        ("Joint replacement", "Region Health Insurance"),
+    ]
+    assert all(set(row) <= set(sample.headers) for row in sample.examples)
+
+    # Columns are the ones the hospital published, which the tall headers hide.
+    assert len(sample.raw_headers) > len(sample.headers)
+    assert any(header.startswith("standard_charge|Platform Health Insurance|")
+               for header in sample.raw_headers)
+    assert "payer_name" not in sample.raw_headers
+    assert len(sample.raw_examples) == 2
+    assert all(len(values) == len(sample.raw_headers) for values in sample.raw_examples)
+
+
+def test_preview_of_a_record_file_lines_its_columns_up_with_its_rows(tmp_path: Path) -> None:
+    source = tmp_path / "records.json"
+    source.write_text(json.dumps({
+        "hospital_name": "Example",
+        "standard_charge_information": [
+            cms_json_record(f"Service {index}", str(400 + index), "MS-DRG",
+                            [payer("Aetna", "PPO", 100.0 + index)])
+            for index in range(14)
+        ],
+    }), encoding="utf-8")
+    sample = sample_schema(source)
+
+    assert len(sample.examples) == 10
+    assert sample.raw_headers == sample.headers
+    assert len(sample.raw_examples) == len(sample.examples)
+    for row, values in zip(sample.examples, sample.raw_examples):
+        assert values == [row.get(name, "") for name in sample.raw_headers]
+
+
+def test_preview_cells_survive_ragged_rows_and_multiline_values(tmp_path: Path) -> None:
+    source = tmp_path / "ragged.csv"
+    source.write_text(
+        "description,code|1,payer_name,standard_charge|negotiated_dollar\n"
+        '"Long stay\nwith a newline",300,Aetna,1200\n'
+        "Short row,301\n",
+        encoding="utf-8")
+    sample = sample_schema(source)
+    assert len(sample.raw_examples) == 2
+
+    gui = pytest.importorskip("mrf_filter.gui")
+    # A short row must not raise when the sideways view indexes past its end.
+    for index in range(len(sample.raw_headers)):
+        for values in sample.raw_examples:
+            gui._preview_cell(values[index] if index < len(values) else "")
+    assert gui._preview_cell(sample.raw_examples[0][0]) == "Long stay with a newline"
+    assert "\n" not in gui._preview_cell("a\r\nb")
+    assert gui._preview_cell("x" * 80).endswith("…")
+    assert len(gui._preview_cell("x" * 80)) == gui.PREVIEW_CELL_CHARS
+
+
+def test_preview_column_names_keep_their_payer_and_their_metric() -> None:
+    """Cutting a wide column name at the tail leaves three columns reading alike."""
+    gui = pytest.importorskip("mrf_filter.gui")
+    name = ("standard_charge|Platform Health Insurance of the Greater Region"
+            "|Preferred Provider Organization|negotiated_dollar")
+    short = gui._preview_middle(name, 62)
+    assert len(short) == 62
+    assert short.startswith("standard_charge|Platform Health")
+    assert short.endswith("negotiated_dollar"), "the metric is what tells the blocks apart"
+    assert gui._preview_middle("short|name", 62) == "short|name"
+
+
+def test_mapping_tab_previews_rows_or_columns_by_layout(tmp_path: Path, monkeypatch) -> None:
+    """Wide files open sideways; everything else opens as rows."""
+    tkinter = pytest.importorskip("tkinter")
+    from mrf_filter import gui as gui_module
+
+    try:
+        probe = tkinter.Tk()
+    except tkinter.TclError as exc:
+        pytest.skip(f"Tk is unavailable: {exc}")
+    probe.destroy()
+
+    monkeypatch.setenv("MRF_FILTER_HOME", str(tmp_path / "home"))
+    monkeypatch.setattr(gui_module, "messagebox", type("D", (), {
+        "showerror": lambda self, t, m: (_ for _ in ()).throw(AssertionError(f"{t}: {m}")),
+        "showinfo": lambda self, t, m: None,
+        "askyesno": lambda self, t, m: True,
+    })())
+
+    def sample_into(app, path: Path, source: str) -> None:
+        app.file_var.set(str(path))
+        app.source_var.set(source)
+        app._sample()
+        deadline = time.monotonic() + 60
+        while time.monotonic() < deadline and (app.sample is None or app.busy):
+            app.update()
+            time.sleep(0.01)
+        assert app.sample is not None
+
+    tall = write_cms_csv(tmp_path / "tall.csv", [
+        cms_row("Sepsis", "871", "MS-DRG", "Aetna", "PPO", "12500")])
+    wide = write_wide_csv(tmp_path / "wide.csv", [
+        wide_row("MRI of brain", "70551", "CPT", platform="400", region="250")])
+
+    app = gui_module.MRFApp()
+    try:
+        sample_into(app, tall, "Tall Hospital")
+        assert app.preview_mode.get() == "rows"
+        columns, rows, note = app._preview_by_row()
+        assert [name for name, _width in columns] == app.sample.headers
+        assert rows and rows[0][0] == "Sepsis"
+        assert note.startswith("1 of the rows")
+
+        # The sideways view is always available, whatever the layout.
+        app.preview_mode.set("columns")
+        app._refresh_preview()
+        columns, rows, note = app._preview_by_column()
+        assert len(rows) == gui_module.PREVIEW_COLUMNS
+        assert rows[0][0] == "description" and rows[0][1] == "Sepsis"
+        assert "of 30 columns" in note
+
+        sample_into(app, wide, "Wide Hospital")
+        assert app.preview_mode.get() == "columns", "a wide row is unreadable across"
+        columns, rows, note = app._preview_by_column()
+        assert "wide layout" in note
+        # The tenth published column is the first payer block, elided in the
+        # middle so that both the payer and the metric stay on screen.
+        assert app.sample.raw_headers[9] == (
+            "standard_charge|Platform Health Insurance|PPO|negotiated_dollar")
+        assert rows[9][0].startswith("standard_charge|Platform Health")
+        assert rows[9][0].endswith("negotiated_dollar")
+
+        # Rows still work for a wide file, led by the columns that differ.
+        app.preview_mode.set("rows")
+        app._refresh_preview()
+        columns, rows, _note = app._preview_by_row()
+        assert [name for name, _width in columns][:2] == ["payer_name", "plan_name"]
+        assert rows[0][0] == "Platform Health Insurance"
+
+        # Collapsing hands the space back to the mapping list.
+        app.preview_visible.set(False)
+        app._toggle_preview()
+        app.update()
+        assert app.preview_host.winfo_manager() == "", "the panel still holds its space"
+        assert all(str(button.cget("state")) == "disabled" for button in app.preview_buttons)
+        app.preview_visible.set(True)
+        app._toggle_preview()
+        app.update()
+        assert app.preview_host.winfo_manager() == "pack"
+    finally:
+        app.destroy()

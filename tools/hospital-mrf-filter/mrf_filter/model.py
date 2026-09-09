@@ -30,6 +30,12 @@ class SchemaSample:
     header_candidates: list[tuple[int, str, int]] = field(default_factory=list)
     records_scanned: int = 0
     payer_plans: int = 0
+    # The file's own columns and first rows, before a wide layout is unpivoted.
+    # For every other shape these mirror ``headers`` and ``examples``; for a wide
+    # file they are what the hospital actually published, which can run to
+    # hundreds of columns and is worth showing as columns rather than as rows.
+    raw_headers: list[str] = field(default_factory=list)
+    raw_examples: list[list[str]] = field(default_factory=list)
 
 
 @dataclass(frozen=True)

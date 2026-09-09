@@ -7,6 +7,7 @@ import io
 import json
 import zipfile
 from collections.abc import Iterator, Mapping
+from itertools import islice
 from pathlib import Path
 from typing import Any
 
@@ -46,7 +47,14 @@ SCHEMA_MIN_RECORDS = 200
 SCHEMA_MAX_RECORDS = 250_000
 SCHEMA_MAX_BYTES = 256 * 1024 * 1024
 SCHEMA_GRACE_RECORDS = 5_000
-SCHEMA_EXAMPLE_ROWS = 4
+# Rows kept for the header-mapping preview. Ten is what fits on screen without
+# a scroll and is enough to tell a code column from a rate column at a glance.
+PREVIEW_ROWS = 10
+
+# Columns shown when the preview is turned on its side. A wide file publishes a
+# column block per payer, so its rows are hundreds of cells long and only the
+# column list is readable.
+PREVIEW_COLUMNS = 10
 
 # Once all of these have been seen, a CMS-shaped file has revealed the record
 # shape that matters, and the scan stops after a short grace window.
@@ -595,7 +603,7 @@ def discover_record_fields(
                 if key not in fields:
                     fields[key] = None
                     seen_leaves.add(normalize_header(key.rsplit(".", 1)[-1]))
-            if len(examples) < SCHEMA_EXAMPLE_ROWS:
+            if len(examples) < PREVIEW_ROWS:
                 examples.append(row)
         if callback is not None and records % 5_000 == 0:
             callback(Progress("Schema scan", records, len(fields), bytes_read, total_bytes))
@@ -637,7 +645,7 @@ def sample_schema(
                         raise ValueError("The file does not contain a CSV header row.")
                     headers = _clean_headers(raw_headers)
                     layout = detect_wide(headers)
-                    sample_rows = [row for row, _ in zip(rows, range(SCHEMA_EXAMPLE_ROWS))]
+                    sample_rows = [row for row, _ in zip(rows, range(PREVIEW_ROWS))]
         finally:
             if not reader.closed:
                 reader.close()
@@ -646,12 +654,17 @@ def sample_schema(
             header_row=detected_header, wide=layout is not None,
         )
         if layout is not None:
-            # The mapper, the scan and the export all see the tall shape.
-            examples = [row for values in sample_rows for row in layout.expand(values)]
-            return SchemaSample(spec, list(layout.tall_headers), examples[:SCHEMA_EXAMPLE_ROWS],
-                                candidates, payer_plans=layout.payer_plans)
+            # The mapper, the scan and the export all see the tall shape. The
+            # raw columns are kept as well: they are the only readable preview
+            # of a file whose rows are hundreds of cells wide.
+            expanded = (row for values in sample_rows for row in layout.expand(values))
+            return SchemaSample(spec, list(layout.tall_headers),
+                                list(islice(expanded, PREVIEW_ROWS)),
+                                candidates, payer_plans=layout.payer_plans,
+                                raw_headers=headers, raw_examples=sample_rows)
         examples = [dict(zip(headers, values)) for values in sample_rows]
-        return SchemaSample(spec, headers, examples, candidates)
+        return SchemaSample(spec, headers, examples, candidates,
+                            raw_headers=headers, raw_examples=sample_rows)
 
     if kind == "json" and _looks_like_jsonl(path):
         kind = "jsonl"
@@ -667,7 +680,11 @@ def sample_schema(
     headers, examples, records = discover_record_fields(path, spec, size, callback, cancel)
     if not headers:
         raise ValueError("No object records were found in the file.")
-    return SchemaSample(spec, headers, examples, [], records_scanned=records)
+    # A record-shaped file has no physical columns, so the flattened field names
+    # stand in for them and the preview can be read either way round.
+    return SchemaSample(spec, headers, examples, [], records_scanned=records,
+                        raw_headers=headers,
+                        raw_examples=[[row.get(name, "") for name in headers] for row in examples])
 
 
 def _csv_error_message(records: int, exc: csv.Error) -> str:

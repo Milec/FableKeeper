@@ -111,6 +111,14 @@ def _check_pipeline(source: Path, storage: AppStorage, expect_kind: str,
     if expect_wide and not sample.spec.wide:
         problems.append(f"{source.name}: the wide layout was not recognised, so it was read "
                         f"with delimiter {sample.spec.delimiter!r} and has no payer column")
+    # The mapping tab shows these; empty here means an empty preview there.
+    if not sample.examples or not sample.raw_headers:
+        problems.append(f"{source.name}: the schema sample carries no preview data "
+                        f"({len(sample.examples)} rows, {len(sample.raw_headers)} columns)")
+    elif expect_wide and sample.raw_headers == sample.headers:
+        # Not a length test: a small wide file can unpivot to the same count.
+        problems.append(f"{source.name}: the published wide columns were not kept, so the "
+                        "mapping tab shows the unpivoted names as the file's own shape")
     mapping = {target: raw for target, (raw, _score) in suggest_mappings(sample.headers).items() if raw}
     for required in ("description", "payer_name", "billing_code", "billing_code_type",
                      "negotiated_dollar_amount"):
