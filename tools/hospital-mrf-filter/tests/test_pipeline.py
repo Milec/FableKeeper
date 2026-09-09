@@ -3,6 +3,8 @@ from __future__ import annotations
 import csv
 import gzip
 import json
+import subprocess
+import sys
 import threading
 import time
 import zipfile
@@ -798,3 +800,49 @@ def test_scanning_with_only_unfilterable_fields_mapped_is_refused(tmp_path: Path
         assert not app.busy
     finally:
         app.destroy()
+
+
+def test_reference_data_resolves_in_a_frozen_build(monkeypatch, tmp_path: Path) -> None:
+    """PyInstaller unpacks data under sys._MEIPASS, not beside the source."""
+    from mrf_filter import standards
+
+    assert standards.package_root() == Path(standards.__file__).resolve().parent
+    assert len(ms_drg_reference()) == 772
+
+    bundle = tmp_path / "meipass"
+    reference = bundle / "mrf_filter" / "reference"
+    reference.mkdir(parents=True)
+    (reference / "ms_drg_codes_fy2026.csv").write_text("001,002,003", encoding="ascii")
+    monkeypatch.setattr(sys, "_MEIPASS", str(bundle), raising=False)
+    assert standards.package_root() == bundle / "mrf_filter"
+    assert ms_drg_reference() == ["001", "002", "003"]
+
+
+def test_selftest_exercises_both_formats_and_reports_the_ijson_backend() -> None:
+    """What a built binary runs to prove it works on a machine without Python."""
+    import io
+
+    from mrf_filter.selftest import run
+
+    report = io.StringIO()
+    code = run(report)
+    text = report.getvalue()
+    assert code == 0, text
+    assert "yajl2_c" in text, "the C backend should be in use from source"
+    assert "772 codes" in text
+    assert "csv" in text and "json" in text
+    assert text.strip().endswith("OK")
+
+
+def test_command_line_entry_points() -> None:
+    """--version and --selftest must not need a display."""
+    entry = Path(__file__).resolve().parent.parent / "app.py"
+    for args, expected in ((["--version"], __import__("mrf_filter").__version__), (["--help"], "--selftest")):
+        result = subprocess.run([sys.executable, str(entry), *args],
+                                capture_output=True, text=True, timeout=120)
+        assert result.returncode == 0, result.stderr
+        assert expected in result.stdout
+
+    rejected = subprocess.run([sys.executable, str(entry), "--nope"],
+                              capture_output=True, text=True, timeout=120)
+    assert rejected.returncode == 2 and "Unrecognized argument" in rejected.stderr

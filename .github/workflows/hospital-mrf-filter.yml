@@ -1,0 +1,77 @@
+name: Hospital MRF Filter
+
+# PyInstaller cannot cross-compile, so each operating system's download has to
+# be built on that operating system. This produces all three from one push.
+on:
+  push:
+    paths:
+      - 'tools/hospital-mrf-filter/**'
+      - '.github/workflows/hospital-mrf-filter.yml'
+  pull_request:
+    paths:
+      - 'tools/hospital-mrf-filter/**'
+      - '.github/workflows/hospital-mrf-filter.yml'
+  workflow_dispatch:
+
+defaults:
+  run:
+    working-directory: tools/hospital-mrf-filter
+
+jobs:
+  build:
+    name: ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            label: Windows
+            artifact: HospitalMRFFilter-windows
+          - os: macos-latest
+            label: macOS
+            artifact: HospitalMRFFilter-macos
+          - os: ubuntu-latest
+            label: Linux
+            artifact: HospitalMRFFilter-linux
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: tools/hospital-mrf-filter/requirements-dev.txt
+
+      - name: Install dependencies
+        run: python -m pip install --upgrade pip -r requirements-dev.txt
+
+      # The Tk tests skip themselves without a display; give Linux one so they
+      # actually run somewhere.
+      - name: Install a virtual display
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y xvfb
+
+      - name: Run tests
+        run: >-
+          ${{ runner.os == 'Linux' && 'xvfb-run -a ' || '' }}python -m pytest -q
+
+      # build.py runs the built binary's own --selftest, which fails the job if
+      # the MS-DRG reference did not get bundled or ijson lost its C backend.
+      - name: Build and self-test the application
+        run: python scripts/build.py
+
+      - name: Package the macOS app bundle
+        if: runner.os == 'macOS'
+        run: ditto -c -k --keepParent dist/HospitalMRFFilter.app dist/HospitalMRFFilter-app.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: |
+            tools/hospital-mrf-filter/dist/HospitalMRFFilter
+            tools/hospital-mrf-filter/dist/HospitalMRFFilter.exe
+            tools/hospital-mrf-filter/dist/HospitalMRFFilter-app.zip
+          if-no-files-found: error
+          retention-days: 30

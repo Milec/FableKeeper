@@ -2,7 +2,7 @@
 
 A local Tkinter desktop application for streaming large CMS hospital price-transparency Machine-Readable Files and exporting a standardized, filtered CSV.
 
-Current version: **1.3.0**
+Current version: **1.4.0**
 
 ## What it does
 
@@ -24,22 +24,21 @@ Containers are recognized by magic bytes rather than file extension, so a `.csv`
 
 For generic JSON, the app detects a likely object-array path within the first 8 MiB. Extremely unusual JSON with no record array in that window should first be converted to JSON Lines.
 
-## Run on Windows
+## Install
 
-1. Install [Python 3.11 or newer](https://www.python.org/downloads/) and enable **Add Python to PATH**.
-2. Extract this folder.
-3. Double-click `run_windows.bat`.
+Download the build for your platform from the latest run of the **Hospital MRF Filter** workflow on the [Actions tab](https://github.com/Milec/FableKeeper/actions/workflows/hospital-mrf-filter.yml). Python, Tk and the parsers are inside the download; nothing else needs installing.
 
-The first launch creates a private virtual environment and installs `ijson` and `rapidfuzz`. Later launches start directly.
+- **Windows** — unzip and run `HospitalMRFFilter.exe`. The build is unsigned, so SmartScreen warns on first launch: choose **More info**, then **Run anyway**. Some antivirus products flag single-file PyInstaller builds on sight; if yours does, build it yourself from the steps below.
+- **macOS** — unzip `HospitalMRFFilter-app.zip` and open `HospitalMRFFilter.app`. It is unsigned and unnotarised, so Gatekeeper blocks the first open: right-click the app and choose **Open**, or run `xattr -dr com.apple.quarantine HospitalMRFFilter.app` first.
+- **Linux** — `chmod +x HospitalMRFFilter && ./HospitalMRFFilter`. Tk is bundled, so no `python3-tk` package is needed.
 
-## Run on macOS or Linux
+To check a download before trusting it with a real file:
 
-```bash
-chmod +x run_mac_linux.sh
-./run_mac_linux.sh
+```
+HospitalMRFFilter --selftest
 ```
 
-On some Linux distributions, install the OS package for Tk first, usually `python3-tk`.
+That runs the whole pipeline over a small generated MRF in both CSV and JSON form and prints what it found: the ijson backend in use, the Tk version, and the size of the bundled MS-DRG list. It exits non-zero if anything is missing.
 
 ## Workflow
 
@@ -123,10 +122,29 @@ python scripts/make_scale_fixture.py jsonl  5000000 /tmp/scale.jsonl   # ~7.3 GB
 
 ## Development and tests
 
+Running from source needs Python 3.11 or newer, and the OS Tk package on some Linux distributions (usually `python3-tk`):
+
 ```bash
 python -m pip install -r requirements-dev.txt
 python -m pytest -q
+python app.py
 ```
+
+`run_windows.bat` and `run_mac_linux.sh` do the same from a private virtual environment.
+
+## Building the standalone application
+
+```bash
+python -m pip install -r requirements-dev.txt
+python scripts/build.py
+```
+
+That produces `dist/HospitalMRFFilter` (`.exe` on Windows, plus a `.app` bundle on macOS) and then runs the built binary's own `--selftest`, failing the build if the result does not work. PyInstaller cannot cross-compile, so each platform's download has to be built on that platform; the GitHub Actions workflow does all three on every push.
+
+Two things are easy to lose in a build and neither raises at build time, so both are asserted by the self-test:
+
+- **ijson picks its backend by `importlib` at run time**, which static analysis cannot see. `hospital-mrf-filter.spec` names `ijson.backends.yajl2_c` explicitly; without it the build silently falls back to the pure-Python backend and JSON files parse roughly ten times slower.
+- **The MS-DRG reference is package data, not a module.** PyInstaller unpacks data under `sys._MEIPASS`, so it is read through `standards.package_root()` rather than a path derived from `__file__`.
 
 The suite covers the CMS tall-CSV template, deep JSON paths, BOM-prefixed JSON, late-appearing payer fields, gzip and zip input, undecodable bytes, the MS-DRG/revenue-code collision, bounded header scoring, cancellation, and a headless run of the real Tk widgets through the whole workflow. The GUI test skips itself when no display is available.
 
