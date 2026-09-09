@@ -32,7 +32,7 @@ standard_charge|Region Health Insurance|HMO|methodology
 median_amount|Region Health Insurance|HMO
 ```
 
-Wide files are recognised from those column names and unpivoted while reading: one row per payer/plan that actually carries a value, with the block's columns renamed to their tall equivalents and `payer_name` and `plan_name` filled in. Everything after that (the mapper, the distinct-value scan, the filters, the export) sees a tall file, so a wide file maps and filters exactly like any other. Payer/plan blocks with no value on a row are skipped rather than emitted empty, which matters when a hospital publishes sixty payers and fills three.
+Wide files are recognised from those column names and unpivoted while reading. The metadata preamble is found by the same header-row detection as any other CSV, so a wide file works with the CMS two-row preamble, with no preamble at all, and with the hospital's own details repeated as leading columns on every row (those are not payer blocks, so they stay shared and repeat onto each unpivoted row). Concretely, unpivoting gives: one row per payer/plan that actually carries a value, with the block's columns renamed to their tall equivalents and `payer_name` and `plan_name` filled in. Everything after that (the mapper, the distinct-value scan, the filters, the export) sees a tall file, so a wide file maps and filters exactly like any other. Payer/plan blocks with no value on a row are skipped rather than emitted empty, which matters when a hospital publishes sixty payers and fills three.
 
 Checked against the published CMS v3.0.0 tall and wide examples, which encode the same 25 services: unpivoting the wide file reproduces all 44 service/payer/plan rows of the tall file, and every one of the eight standardized rate fields agrees on all 44.
 
@@ -117,6 +117,7 @@ Every pass is streaming, and the structures the app keeps are bounded rather tha
 - **Description is never scanned.** A per-service description is close to unique per row, so enumerating it costs a large set and produces a pick list nobody can use. It is mapped and exported like any other field, but not offered as a filter column (`filterable=False` on its `TargetField`).
 - **Distinct values** stop being collected at 250,000 per column (`DISTINCT_VALUE_LIMIT` in `mrf_filter/engine.py`), for the columns that are offered. A billing code column on a multi-hospital file still runs to hundreds of thousands. Such a column is marked partial in the UI and in the cache, and the values to keep are typed in instead.
 - **The value list widget** renders at most 5,000 rows at a time; the search box reaches the rest.
+- **The delimiter is chosen by field-count agreement**, not by how header-like a row looks. Wide column *names* contain pipes, so scoring the header row alone picked `|` over `,` on a comma-separated wide file with few payers and read the whole thing as nonsense.
 - **CSV fields** are capped at 8 MiB (`CSV_MAX_FIELD_BYTES` in `mrf_filter/readers.py`). One unbalanced quote otherwise makes `csv.reader` accumulate a single field to end of file, which on a multi-gigabyte MRF is an out-of-memory kill rather than an error message.
 - **Schema discovery** on record-shaped JSON is bounded by the `SCHEMA_*` budgets, and stops as soon as the CMS core fields have been seen.
 

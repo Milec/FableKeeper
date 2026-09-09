@@ -1015,3 +1015,99 @@ def test_wide_and_tall_cache_entries_do_not_collide(tmp_path: Path) -> None:
     wide = FileSpec(path=tmp_path / "f.csv", kind="csv", wide=True)
     assert _cache_column_key(tall, "payer_name", "file", 10) != _cache_column_key(
         wide, "payer_name", "file", 10)
+
+
+def test_wide_file_is_not_parsed_with_the_pipe_delimiter(tmp_path: Path) -> None:
+    """Wide column *names* are full of pipes, which fooled delimiter detection.
+
+    Splitting a comma-separated wide file on "|" yields a header row that scores
+    well, while every data row collapses to one field. With few payers that beat
+    the comma, and the file was read as nonsense.
+    """
+    from mrf_filter.readers import _delimiter_score, _parse_csv_window
+
+    source = write_wide_csv(tmp_path / "wide.csv", [
+        wide_row("MRI of brain", "70551", "CPT", platform="400", region="250"),
+        wide_row("Joint replacement", "470", "MS-DRG", platform="49000", region="14000"),
+    ])
+    text = source.read_text(encoding="utf-8")
+    comma = _delimiter_score(_parse_csv_window(text, ","))
+    pipe = _delimiter_score(_parse_csv_window(text, "|"))
+    assert comma > pipe, f"comma {comma} should beat pipe {pipe} on field-count agreement"
+
+    sample = sample_schema(source)
+    assert sample.spec.delimiter == ","
+    assert sample.spec.wide is True and sample.payer_plans == 2
+    assert "description" in sample.headers
+
+
+def test_hospital_columns_repeat_onto_every_unpivoted_row(tmp_path: Path) -> None:
+    """Some hospitals repeat their own details as leading columns on every row."""
+    lead = "hospital_name,location_name,license_number|CA"
+    header = f"{lead},{WIDE_HEADER}"
+    body = "\n".join([
+        "hospital_name,last_updated_on,version,location_name,hospital_address,license_number|CA",
+        'West Mercy Hospital,2026-04-01,3.0.0,West Mercy Hospital,"12 Main St, Fullerton, CA",50056',
+        header,
+        "West Mercy Hospital,Main Campus,50056," + wide_row(
+            "MRI of brain", "70551", "CPT", platform="400", region="250"),
+    ])
+    source = tmp_path / "wide_lead.csv"
+    source.write_text(body + "\n", encoding="utf-8")
+
+    sample = sample_schema(source)
+    assert sample.spec.delimiter == "," and sample.spec.wide is True
+    assert sample.spec.header_row == 2
+    # A hospital column is not a payer block, so it stays shared.
+    assert sample.headers[:3] == ["hospital_name", "location_name", "license_number|CA"]
+
+    rows = list(iter_rows(sample.spec))
+    assert len(rows) == 2
+    for row in rows:
+        assert row["hospital_name"] == "West Mercy Hospital"
+        assert row["location_name"] == "Main Campus"
+        assert row["license_number|CA"] == "50056"
+    assert [row["payer_name"] for row in rows] == [
+        "Platform Health Insurance", "Region Health Insurance"]
+
+
+def test_wide_file_without_a_metadata_preamble(tmp_path: Path) -> None:
+    """Not every hospital emits the two metadata rows; the header can be row 1."""
+    source = tmp_path / "no_preamble.csv"
+    source.write_text("\n".join([
+        WIDE_HEADER,
+        wide_row("MRI of brain", "70551", "CPT", platform="400", region="250"),
+    ]) + "\n", encoding="utf-8")
+
+    sample = sample_schema(source)
+    assert sample.spec.header_row == 0
+    assert sample.spec.wide is True and sample.payer_plans == 2
+    rows = list(iter_rows(sample.spec))
+    assert [(row["payer_name"], row["standard_charge|negotiated_dollar"]) for row in rows] == [
+        ("Platform Health Insurance", "400"), ("Region Health Insurance", "250")]
+
+
+def test_many_payer_blocks_still_find_the_header_row(tmp_path: Path) -> None:
+    """A hospital with sixty payers publishes a header row of several hundred columns."""
+    payers = [(f"Payer {n:02d} Health Plan", f"Plan {n % 4}") for n in range(60)]
+    blocks = [f"standard_charge|{p}|{pl}|negotiated_dollar" for p, pl in payers]
+    blocks += [f"standard_charge|{p}|{pl}|methodology" for p, pl in payers]
+    header = ",".join(["description", "code|1", "code|1|type", "setting",
+                       "standard_charge|gross"] + blocks + ["standard_charge|min"])
+    values = ["Service A", "70551", "CPT", "outpatient", "1200"]
+    values += [str(300 + n) for n in range(60)] + ["fee schedule"] * 60 + ["250"]
+    source = tmp_path / "many.csv"
+    source.write_text("\n".join([
+        "hospital_name,last_updated_on,version",
+        "West Mercy Hospital,2026-04-01,3.0.0",
+        header,
+        ",".join(values),
+    ]) + "\n", encoding="utf-8")
+
+    sample = sample_schema(source)
+    assert sample.spec.delimiter == "," and sample.spec.header_row == 2
+    assert sample.payer_plans == 60
+    rows = list(iter_rows(sample.spec))
+    assert len(rows) == 60
+    assert rows[0]["standard_charge|gross"] == "1200"
+    assert {row["payer_name"] for row in rows} == {p for p, _plan in payers}

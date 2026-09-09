@@ -321,13 +321,40 @@ def _header_preview(row: list[str]) -> str:
     return text[:180]
 
 
+def _delimiter_score(rows: list[list[str]]) -> float:
+    """How stable the field count is under this delimiter.
+
+    The delimiter and the header row are two separate questions, and answering
+    the first by how header-like a row looks gets the wide CMS layout wrong: its
+    column *names* are full of pipes ("standard_charge|Aetna|PPO|methodology"),
+    so splitting a comma-separated wide file on "|" produces a header row that
+    scores well while every data row collapses to a single field. Field-count
+    agreement across rows is what actually identifies a delimiter, and it is
+    weighted by the width so that a delimiter which finds no fields at all
+    cannot win by being consistently useless.
+    """
+    widths = [len(row) for row in rows if any(cell for cell in row)]
+    if not widths:
+        return 0.0
+    counts: dict[int, int] = {}
+    for width in widths:
+        counts[width] = counts.get(width, 0) + 1
+    modal = max(counts, key=lambda width: (counts[width], width))
+    if modal < 2:
+        return 0.0
+    return counts[modal] / len(widths) * min(modal, 60)
+
+
 def _detect_csv(path: Path, header_row_override: int | None = None) -> tuple[str, str, int, list[tuple[int, str, int]]]:
     encoding, text = _read_csv_window(path)
+    parsed = [(delimiter, _parse_csv_window(text, delimiter)) for delimiter in CSV_DELIMITERS]
+    ranked_delimiters = sorted(
+        ((_delimiter_score(rows), -CSV_DELIMITERS.index(delimiter), delimiter, rows)
+         for delimiter, rows in parsed if rows),
+        reverse=True,
+    )
     best: tuple[int, str, int, list[list[str]], dict[int, int]] | None = None
-    for delimiter in CSV_DELIMITERS:
-        rows = _parse_csv_window(text, delimiter)
-        if not rows:
-            continue
+    for _score, _order, delimiter, rows in ranked_delimiters:
         if header_row_override is not None:
             if not 0 <= header_row_override < len(rows):
                 continue
@@ -336,8 +363,8 @@ def _detect_csv(path: Path, header_row_override: int | None = None) -> tuple[str
             indices = list(range(min(len(rows), CSV_HEADER_SCAN_RECORDS)))
         scores = {index: _header_score(rows, index) for index in indices}
         top = max(scores, key=lambda index: (scores[index], -index))
-        if best is None or scores[top] > best[0]:
-            best = (scores[top], delimiter, top, rows, scores)
+        best = (scores[top], delimiter, top, rows, scores)
+        break
     if best is None:
         if header_row_override is not None:
             raise ValueError(
